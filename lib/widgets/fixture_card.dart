@@ -3,8 +3,15 @@ import '../models/fixture.dart';
 
 class FixtureCard extends StatelessWidget {
   final Fixture fixture;
+  final bool sportFilterActive;
+  final VoidCallback? onTap;
 
-  const FixtureCard({super.key, required this.fixture});
+  const FixtureCard({
+    super.key,
+    required this.fixture,
+    this.sportFilterActive = false,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +19,10 @@ class FixtureCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -26,7 +36,13 @@ class FixtureCard extends StatelessWidget {
                 alignEnd: false,
               ),
             ),
-            Expanded(flex: 3, child: _MiddleInfo(fixture: fixture)),
+            Expanded(
+              flex: 3,
+              child: _MiddleInfo(
+                fixture: fixture,
+                sportFilterActive: sportFilterActive,
+              ),
+            ),
             Expanded(
               flex: 4,
               child: _TeamSide(
@@ -38,6 +54,7 @@ class FixtureCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -109,17 +126,29 @@ class _TeamLogo extends StatelessWidget {
 
 class _MiddleInfo extends StatelessWidget {
   final Fixture fixture;
-  const _MiddleInfo({required this.fixture});
+  final bool sportFilterActive;
+  const _MiddleInfo({required this.fixture, required this.sportFilterActive});
 
   @override
   Widget build(BuildContext context) {
     final time =
         '${fixture.date.hour.toString().padLeft(2, '0')}:${fixture.date.minute.toString().padLeft(2, '0')}';
+    final sportLabel = fixture.sport
+        .split('_')
+        .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+        .join(' ');
+
+    final topText = sportFilterActive ? fixture.leagueName : sportLabel;
+    final midText = sportFilterActive ? fixture.venue : fixture.leagueName;
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          fixture.sport,
+          topText,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.bold,
@@ -129,7 +158,7 @@ class _MiddleInfo extends StatelessWidget {
         ),
         const SizedBox(height: 2),
         Text(
-          fixture.leagueName,
+          midText,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,

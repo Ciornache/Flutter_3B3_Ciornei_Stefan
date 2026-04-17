@@ -8,6 +8,7 @@ import '../models/league.dart';
 import '../models/fixture.dart';
 import '../utils/db_init.dart' show fixtureBoxBySport;
 import '../widgets/fixture_card.dart';
+import 'match_detail_screen.dart';
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
@@ -20,26 +21,16 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage>
     with SingleTickerProviderStateMixin {
-  static const List<String> _boxes = [
-    'sports',
-    'continents',
-    'countries',
-    'leagues',
-  ];
-  static const List<String> _filterKeys = [
-    'sport',
-    'continent',
-    'country',
-    'league',
-  ];
   static const int _pageSize = 20;
 
   late TabController _tabController;
 
   List<dynamic> _drawerElements = [];
-  final List<Map<String, dynamic>> _filters = [];
+  final Map<String, String> _filters = {};
   List<Fixture> _currentFixtures = [];
   Map<String, Country> _countryByCode = {};
+  Sport? _selectedSport;
+  bool _skippedCountry = false;
 
   int _level = 0;
   final List<int> _pages = [0, 0, 0];
@@ -62,18 +53,25 @@ class _MyHomePageState extends State<MyHomePage>
     super.dispose();
   }
 
-  String? get _activeSport => _filterValue('sport') as String?;
-  String? get _activeContinent => _filterValue('continent') as String?;
-  String? get _activeCountry => _filterValue('country') as String?;
-  String? get _activeLeague => _filterValue('league')?.toString();
+  String? get _activeSport => _filters['sport'];
+  String? get _activeContinent => _filters['continent'];
+  String? get _activeCountry => _filters['country'];
+  String? get _activeLeague => _filters['league'];
 
-  dynamic _filterValue(String key) {
-    print('Looking for filter $key in $_filters');
-    for (final f in _filters) {
-      if (f['filter'] == key) return f['value'];
-    }
-    return null;
+  DrillLevel? _drillLevelAt(int level) {
+    if (level == 0) return null;
+    final path = _selectedSport?.drillPath ?? const [];
+    final idx = level - 1;
+    if (idx < 0 || idx >= path.length) return null;
+    return path[idx];
   }
+
+  String _filterKeyAt(int level) {
+    if (level == 0) return 'sport';
+    return _drillLevelAt(level)?.name ?? '';
+  }
+
+  int get _maxLevel => 1 + (_selectedSport?.drillPath.length ?? 0) - 1;
 
   Future<void> _loadCountryLookup() async {
     final box = await Hive.openBox<Country>('countries');
@@ -83,38 +81,42 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   Future<List<dynamic>> _openBoxValues(int level) async {
-    switch (level) {
-      case 0:
-        return (await Hive.openBox<Sport>('sports')).values.toList();
-      case 1:
-        return (await Hive.openBox<Continent>('continents')).values.toList();
-      case 2:
-        return (await Hive.openBox<Country>('countries')).values.toList();
-      case 3:
-        return (await Hive.openBox<League>('leagues')).values.toList();
+    if (level == 0) {
+      return (await Hive.openBox<Sport>('sports')).values.toList();
     }
-    return const [];
+    final drill = _drillLevelAt(level);
+    switch (drill) {
+      case DrillLevel.continent:
+        return (await Hive.openBox<Continent>('continents')).values.toList();
+      case DrillLevel.country:
+        return (await Hive.openBox<Country>('countries')).values.toList();
+      case DrillLevel.league:
+        return (await Hive.openBox<League>('leagues')).values.toList();
+      case null:
+        return const [];
+    }
   }
 
   Future<void> _loadDrawerElements() async {
-    if (_level < 0 || _level >= _boxes.length) return;
-
     List<dynamic> items = await _openBoxValues(_level);
+    final drill = _drillLevelAt(_level);
 
-    if (_level == 2) {
+    if (drill == DrillLevel.country) {
       final continent = _activeContinent;
       if (continent != null) {
         items = items
             .where((c) => c is Country && c.continent == continent)
             .toList();
       }
-    } else if (_level == 3) {
+    } else if (drill == DrillLevel.league) {
+      final sportId = _activeSport;
       final countryCode = _activeCountry;
-      if (countryCode != null) {
-        items = items
-            .where((l) => l is League && l.countryId == countryCode)
-            .toList();
-      }
+      items = items.where((l) {
+        if (l is! League) return false;
+        if (sportId != null && l.sportId != sportId) return false;
+        if (countryCode != null && l.countryId != countryCode) return false;
+        return true;
+      }).toList();
     }
 
     setState(() {
@@ -123,11 +125,11 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   Future<void> _reloadFixtures() async {
-    final sport = _activeSport;
+    final sportId = _activeSport;
     final List<Fixture> all = [];
 
-    if (sport != null) {
-      final boxName = fixtureBoxBySport[sport];
+    if (sportId != null) {
+      final boxName = fixtureBoxBySport[sportId];
       if (boxName != null) {
         final box = await Hive.openBox<Fixture>(boxName);
         all.addAll(box.values);
@@ -148,18 +150,12 @@ class _MyHomePageState extends State<MyHomePage>
       if (league != null && f.leagueId != league) return false;
       if (continent != null) {
         final c = _countryByCode[f.countryCode];
-        print(
-          'Filtering fixture ${f.id}: country=${f.countryCode} continent=${c?.continent} vs filter=$continent',
-        );
-        if (c == null || c.continent.toLowerCase() != continent.toLowerCase())
+        if (c == null || c.continent.toLowerCase() != continent.toLowerCase()) {
           return false;
+        }
       }
       return true;
     }).toList()..sort((a, b) => a.date.compareTo(b.date));
-
-    print(
-      'Fixtures reloaded: ${filtered.length} of ${all.length} (sport=$sport)',
-    );
 
     setState(() {
       _currentFixtures = filtered;
@@ -169,32 +165,38 @@ class _MyHomePageState extends State<MyHomePage>
     });
   }
 
-  dynamic _filterValueOf(dynamic element) {
-    if (element is Sport) return element.name;
+  String _filterValueOf(dynamic element) {
+    if (element is Sport) return element.id;
     if (element is Continent) return element.name;
     if (element is Country) return element.code;
     if (element is League) return element.id;
     return element.toString();
   }
 
-  String _nameOf(dynamic element) {
-    if (element is Sport) return element.name;
-    if (element is Continent) return element.name;
-    if (element is Country) return element.name;
-    if (element is League) return element.name;
-    return element.toString();
-  }
-
   void _onElementTap(dynamic element) {
-    final filter = {
-      'filter': _filterKeys[_level],
-      'operator': r'$eq',
-      'value': _filterValueOf(element),
-    };
-    _filters.add(filter);
-    print('Drawer forward: added filter $filter');
+    final key = _filterKeyAt(_level);
+    final value = _filterValueOf(element);
+    _filters[key] = value;
+    print('Drawer forward: added filter $key=$value');
 
-    if (_level < _boxes.length - 1) {
+    if (_level == 0 && element is Sport) {
+      _selectedSport = element;
+    }
+
+    if (element is Continent && element.name == 'World') {
+      _filters['country'] = 'World';
+      _skippedCountry = true;
+      final path = _selectedSport?.drillPath ?? const [];
+      final leagueIdx = path.indexOf(DrillLevel.league);
+      if (leagueIdx >= 0) {
+        _level = 1 + leagueIdx;
+        _loadDrawerElements();
+        _reloadFixtures();
+        return;
+      }
+    }
+
+    if (_level < _maxLevel) {
       _level++;
       _loadDrawerElements();
     } else {
@@ -203,12 +205,31 @@ class _MyHomePageState extends State<MyHomePage>
     _reloadFixtures();
   }
 
+  void _deactivateLeague() {
+    _filters.remove('league');
+    _reloadFixtures();
+  }
+
   void _goBack() {
-    if (_filters.isNotEmpty) {
-      final removed = _filters.removeLast();
-      print('Drawer back: removed filter $removed');
+    if (_skippedCountry && _drillLevelAt(_level) == DrillLevel.league) {
+      _filters.remove('league');
+      _filters.remove('country');
+      _filters.remove('continent');
+      _skippedCountry = false;
+      final path = _selectedSport?.drillPath ?? const [];
+      final continentIdx = path.indexOf(DrillLevel.continent);
+      _level = continentIdx >= 0 ? 1 + continentIdx : 1;
+      _loadDrawerElements();
+      _reloadFixtures();
+      return;
     }
-    _level--;
+    if (_filters.isNotEmpty) {
+      final lastKey = _filters.keys.last;
+      _filters.remove(lastKey);
+      print('Drawer back: removed filter $lastKey');
+    }
+    if (_level > 0) _level--;
+    if (_level == 0) _selectedSport = null;
     _loadDrawerElements();
     _reloadFixtures();
   }
@@ -272,7 +293,15 @@ class _MyHomePageState extends State<MyHomePage>
         Expanded(
           child: ListView.builder(
             itemCount: pageItems.length,
-            itemBuilder: (_, i) => FixtureCard(fixture: pageItems[i]),
+            itemBuilder: (_, i) => FixtureCard(
+              fixture: pageItems[i],
+              sportFilterActive: _activeSport != null,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => MatchDetailScreen(fixture: pageItems[i]),
+                ),
+              ),
+            ),
           ),
         ),
         _paginationBar(tabIndex, page, totalPages, fixtures.length),
@@ -280,7 +309,7 @@ class _MyHomePageState extends State<MyHomePage>
     );
   }
 
-Widget _paginationBar(int tabIndex, int page, int totalPages, int total) {
+  Widget _paginationBar(int tabIndex, int page, int totalPages, int total) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       child: Row(
@@ -342,13 +371,23 @@ Widget _paginationBar(int tabIndex, int page, int totalPages, int total) {
             if (_drawerElements.isEmpty)
               const Center(child: CircularProgressIndicator())
             else
-              ..._drawerElements.map(
-                (element) => ListTile(
-                  title: Text(_nameOf(element)),
+              ..._drawerElements.map((element) {
+                final isActiveLeague =
+                    element is League && _activeLeague == element.id;
+                return ListTile(
+                  selected: isActiveLeague,
+                  selectedTileColor: Colors.blue.shade100,
+                  title: Text(element?.name ?? element.toString()),
                   trailing: buildImage(element),
-                  onTap: () => _onElementTap(element),
-                ),
-              ),
+                  onTap: () {
+                    if (isActiveLeague) {
+                      _deactivateLeague();
+                    } else {
+                      _onElementTap(element);
+                    }
+                  },
+                );
+              }),
           ],
         ),
       ),

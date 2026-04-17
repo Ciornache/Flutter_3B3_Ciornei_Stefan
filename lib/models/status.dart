@@ -1,32 +1,34 @@
-enum FixtureStatus {
-  notstarted,
-  live,
-  finished,
-  halftime,
-  extratime,
-  penalty,
-  breaktime,
-}
+enum MatchStatus { upcoming, live, finished }
 
-extension FixtureStatusExtension on FixtureStatus {
-  static FixtureStatus fromJson(String status) {
-    switch (status) {
-      case 'Not Started':
-        return FixtureStatus.notstarted;
-      case 'Live':
-        return FixtureStatus.live;
-      case 'Finished':
-        return FixtureStatus.finished;
-      case 'Halftime':
-        return FixtureStatus.halftime;
-      case 'Extra Time':
-        return FixtureStatus.extratime;
-      case 'Penalty':
-        return FixtureStatus.penalty;
-      case 'Break Time':
-        return FixtureStatus.breaktime;
+extension MatchStatusMapper on MatchStatus {
+  static MatchStatus fromEspn(Map<String, dynamic> statusType) {
+    final state = (statusType['state'] ?? '').toString();
+    switch (state) {
+      case 'in':
+        return MatchStatus.live;
+      case 'post':
+        return MatchStatus.finished;
       default:
-        throw Exception('Unknown fixture status: $status');
+        return MatchStatus.upcoming;
+    }
+  }
+
+  static MatchStatus fromApiFootball(String short) {
+    const live = {'1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'SUSP', 'INT'};
+    const finished = {'FT', 'AET', 'PEN', 'AWD', 'WO'};
+    if (live.contains(short)) return MatchStatus.live;
+    if (finished.contains(short)) return MatchStatus.finished;
+    return MatchStatus.upcoming;
+  }
+
+  String get display {
+    switch (this) {
+      case MatchStatus.upcoming:
+        return 'Upcoming';
+      case MatchStatus.live:
+        return 'Live';
+      case MatchStatus.finished:
+        return 'Finished';
     }
   }
 }

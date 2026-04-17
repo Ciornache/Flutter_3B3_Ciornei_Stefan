@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import 'status.dart';
 
 class Fixture {
   final int id;
@@ -10,6 +11,8 @@ class Fixture {
   final String countryCode;
   final String continent;
   final String statusText;
+  final MatchStatus status;
+  final String venue;
   final int homeTeamId;
   final String homeTeamName;
   final String homeTeamLogo;
@@ -29,6 +32,8 @@ class Fixture {
     required this.countryCode,
     required this.continent,
     required this.statusText,
+    required this.status,
+    this.venue = '',
     required this.homeTeamId,
     required this.homeTeamName,
     required this.homeTeamLogo,
@@ -38,6 +43,59 @@ class Fixture {
     this.homeScore,
     this.awayScore,
   });
+
+  factory Fixture.fromEspnJson(
+    Map<String, dynamic> event,
+    String sport, {
+    required String leagueId,
+    required String leagueName,
+    required String leagueLogo,
+  }) {
+    final competitions = (event['competitions'] as List?) ?? const [];
+    final comp = competitions.isNotEmpty ? _asMap(competitions.first) : <String, dynamic>{};
+    final competitors = (comp['competitors'] as List?) ?? const [];
+
+    Map<String, dynamic> findSide(String side) {
+      for (final c in competitors) {
+        final m = _asMap(c);
+        if (m['homeAway'] == side) return m;
+      }
+      return <String, dynamic>{};
+    }
+
+    final homeC = findSide('home');
+    final awayC = findSide('away');
+    final homeTeam = _asMap(homeC['team']);
+    final awayTeam = _asMap(awayC['team']);
+    final statusType = _asMap(_asMap(comp['status'])['type']);
+    final venueMap = _asMap(comp['venue']);
+    final venueAddr = _asMap(venueMap['address']);
+    final venueName = (venueMap['fullName'] ?? '').toString();
+    final venueCity = (venueAddr['city'] ?? '').toString();
+    final venue = [venueName, venueCity].where((s) => s.isNotEmpty).join(', ');
+
+    return Fixture(
+      id: _asInt(event['id']),
+      sport: sport,
+      date: _asDate(event['date']),
+      leagueId: leagueId,
+      leagueName: leagueName,
+      leagueLogo: leagueLogo,
+      countryCode: '',
+      continent: '',
+      statusText: (statusType['description'] ?? statusType['detail'] ?? '').toString(),
+      status: MatchStatusMapper.fromEspn(statusType),
+      venue: venue,
+      homeTeamId: _asInt(homeTeam['id']),
+      homeTeamName: (homeTeam['displayName'] ?? homeTeam['name'] ?? '').toString(),
+      homeTeamLogo: (homeTeam['logo'] ?? '').toString(),
+      awayTeamId: _asInt(awayTeam['id']),
+      awayTeamName: (awayTeam['displayName'] ?? awayTeam['name'] ?? '').toString(),
+      awayTeamLogo: (awayTeam['logo'] ?? '').toString(),
+      homeScore: _asNullableInt(homeC['score']),
+      awayScore: _asNullableInt(awayC['score']),
+    );
+  }
 
   factory Fixture.fromApiJson(
     Map<String, dynamic> j,
@@ -61,6 +119,10 @@ class Fixture {
 
     final home = _asMap(teams['home']);
     final away = _asMap(teams['away']);
+    final venueMap = _asMap(base['venue']);
+    final venueName = (venueMap['name'] ?? '').toString();
+    final venueCity = (venueMap['city'] ?? '').toString();
+    final venue = [venueName, venueCity].where((s) => s.isNotEmpty).join(', ');
 
     return Fixture(
       id: _asInt(base['id']),
@@ -72,6 +134,10 @@ class Fixture {
       countryCode: resolved.$1,
       continent: resolved.$2,
       statusText: _asMap(base['status'])['long']?.toString() ?? '',
+      status: MatchStatusMapper.fromApiFootball(
+        _asMap(base['status'])['short']?.toString() ?? '',
+      ),
+      venue: venue,
       homeTeamId: _asInt(home['id']),
       homeTeamName: (home['name'] ?? '').toString(),
       homeTeamLogo: (home['logo'] ?? '').toString(),
@@ -127,6 +193,8 @@ class FixtureAdapter extends TypeAdapter<Fixture> {
       countryCode: r.readString(),
       continent: r.readString(),
       statusText: r.readString(),
+      status: MatchStatus.values[r.readInt()],
+      venue: r.readString(),
       homeTeamId: r.readInt(),
       homeTeamName: r.readString(),
       homeTeamLogo: r.readString(),
@@ -149,6 +217,8 @@ class FixtureAdapter extends TypeAdapter<Fixture> {
     w.writeString(f.countryCode);
     w.writeString(f.continent);
     w.writeString(f.statusText);
+    w.writeInt(f.status.index);
+    w.writeString(f.venue);
     w.writeInt(f.homeTeamId);
     w.writeString(f.homeTeamName);
     w.writeString(f.homeTeamLogo);

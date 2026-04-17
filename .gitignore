@@ -43,3 +43,31 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Coverage
+coverage/
+
+# Generated files
+*.g.dart
+
+# Platform-specific generated files
+/windows/flutter/generated_plugins.cmake
+/linux/flutter/generated_plugins.cmake
+/macos/Flutter/GeneratedPluginRegistrant.swift
+
+# Environment
+.env
+.env.local
+
+# macOS specific
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Web build
+/web/js/
+
+# Windows build
+/windows/flutter/
+
+# Linux build
+/linux/flutter/
