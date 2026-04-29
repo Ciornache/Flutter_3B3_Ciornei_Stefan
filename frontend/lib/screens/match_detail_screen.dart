@@ -84,7 +84,10 @@ class _MatchDetailScreenState extends State<MatchDetailScreen>
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Icon(_watching ? Icons.notifications : Icons.notifications_off_outlined),
+                  : Icon(
+                      _watching ? Icons.notifications_active : Icons.notifications_outlined,
+                      color: _watching ? Colors.amber : null,
+                    ),
             ),
         ],
       ),

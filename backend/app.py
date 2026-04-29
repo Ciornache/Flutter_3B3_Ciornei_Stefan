@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from flask import Flask, jsonify, request
 
 import cache
@@ -16,21 +16,51 @@ from config import (
     SPORTS,
 )
 from db import init_db, session_scope
+from mappers._utils import espn_date
 from mappers.country import country_from_football
 from mappers.details import details_from_espn, details_from_football
 from mappers.fixture import fixture_from_espn, fixture_from_football
 from mappers.league import league_from_football, league_from_seed
 from models import Device, Subscription
 from services.api_service import (
-    ProviderError,
     api_football_get,
-    espn_date,
     espn_scoreboard,
     espn_summary,
 )
-from services.notifications import subscribe_token, unsubscribe_token
+from services.notifications import (
+    init_firebase,
+    notify_match,
+    notify_token,
+    subscribe_token,
+    unsubscribe_token,
+)
+from services.worker import EspnWorker, FootballWorker, Worker
+
+import logging
+import threading
 
 app = Flask(__name__)
+
+init_db()
+init_firebase()
+
+
+def _start_workers() -> list[threading.Thread]:
+    workers: list[Worker] = [FootballWorker(), EspnWorker()]
+    threads: list[threading.Thread] = []
+    for w in workers:
+        t = threading.Thread(target=w.run, name=f"{w.name}-events", daemon=True)
+        t.start()
+        threads.append(t)
+    return threads
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+_worker_threads = _start_workers()
+logging.info("workers started: %d", len(_worker_threads))
 
 
 @app.get("/sports")
@@ -50,7 +80,7 @@ def countries():
         return jsonify(cached)
     try:
         data = api_football_get("/countries")
-    except ProviderError as e:
+    except Exception as e:
         return {"error": str(e)}, 502
     items = [country_from_football(c) for c in data.get("response", [])]
     items.append({"id": "World", "name": "World", "code": "World", "flag": "", "continent": "World"})
@@ -70,7 +100,7 @@ def leagues():
     try:
         data = api_football_get("/leagues")
         items.extend(league_from_football(l) for l in data.get("response", []))
-    except ProviderError as e:
+    except Exception as e:
         app.logger.warning("football leagues fetch failed: %s", e)
 
     if sport:
@@ -80,43 +110,130 @@ def leagues():
 
 
 
+FIXTURES_PAGE_SIZE = 20
+
+
 @app.get("/fixtures")
 def fixtures():
-    sport = request.args.get("sport", "football")
-    dates = _parse_dates(request.args.get("dates"))
+    sport = request.args.get("sport") or None
+    date_arg = request.args.get("date")
+    country = request.args.get("country") or None
+    continent = request.args.get("continent") or None
+    league = request.args.get("league") or None
+    favourites = (request.args.get("favourites") or "").lower() == "true"
+    device_id = request.args.get("deviceId") or None
 
-    cache_key = f"fixtures:{sport}:{','.join(d.isoformat() for d in dates)}"
+    try:
+        page = int(request.args.get("page", "0"))
+    except ValueError:
+        page = 0
+    if page < 0:
+        page = 0
+
+    try:
+        d = date.fromisoformat(date_arg) if date_arg else date.today()
+    except ValueError:
+        d = date.today()
+
+    favourite_ids: set[int] | None = None
+    if favourites and device_id:
+        with session_scope() as s:
+            rows = s.query(Subscription.match_id).filter(
+                Subscription.device_id == device_id
+            ).all()
+            favourite_ids = {r[0] for r in rows}
+
+    sports_to_fetch = [sport] if sport else [s["id"] for s in SPORTS]
+    items: list[dict] = []
+    for sp in sports_to_fetch:
+        items.extend(_fetch_fixtures_for_date(sp, d))
+
+    items = [
+        f for f in items
+        if (country is None or f.get("countryCode") == country)
+        and (league is None or f.get("leagueId") == league)
+        and (continent is None or f.get("continent") == continent)
+        and (favourite_ids is None or f.get("id") in favourite_ids)
+    ]
+    items.sort(key=lambda f: f.get("date") or "")
+
+    total = len(items)
+    total_pages = (total + FIXTURES_PAGE_SIZE - 1) // FIXTURES_PAGE_SIZE
+    if total_pages == 0:
+        total_pages = 1
+    if page >= total_pages:
+        page = total_pages - 1
+
+    def slice_page(p: int) -> list[dict] | None:
+        if p < 0 or p >= total_pages:
+            return None
+        start = p * FIXTURES_PAGE_SIZE
+        return items[start : start + FIXTURES_PAGE_SIZE]
+
+    return jsonify({
+        "total": total,
+        "totalPages": total_pages,
+        "page": page,
+        "pageSize": FIXTURES_PAGE_SIZE,
+        "previous": slice_page(page - 1),
+        "current": slice_page(page) or [],
+        "next": slice_page(page + 1),
+    })
+
+
+def _fetch_fixtures_for_date(sport: str, d: date) -> list[dict]:
+    cache_key = f"fixtures_raw:{sport}:{d.isoformat()}"
     cached = cache.get(cache_key, FIXTURES_TTL)
-    if cached is not None:
-        return jsonify(cached)
+    if isinstance(cached, list):
+        return cached
 
     items: list[dict] = []
-
+    ok = True
     if sport == "football":
-        for d in dates:
-            try:
-                data = api_football_get("/fixtures", params={"date": d.isoformat()})
-                items.extend(
-                    fixture_from_football(f, _resolve_country)
-                    for f in data.get("response", [])
-                )
-            except ProviderError as e:
-                app.logger.warning("football fixtures %s failed: %s", d, e)
-    else:
-        leagues_for_sport = [l for l in ESPN_LEAGUES if l["sport_id"] == sport]
-        for league in leagues_for_sport:
-            for d in dates:
-                try:
-                    data = espn_scoreboard(sport, league["id"], espn_date(d))
-                    items.extend(
-                        fixture_from_espn(e, sport, league)
-                        for e in data.get("events", [])
-                    )
-                except ProviderError as e:
-                    app.logger.warning("espn %s/%s %s failed: %s", sport, league["id"], d, e)
+        try:
+            data = api_football_get("/fixtures", params={"date": d.isoformat()})
+            items.extend(
+                fixture_from_football(f, _resolve_country)
+                for f in data.get("response", [])
+            )
+        except Exception as e:
+            app.logger.warning("football fixtures %s failed: %s", d, e)
+            ok = False
+        if ok:
+            cache.put(cache_key, items)
+        return items
 
-    cache.put(cache_key, items)
-    return jsonify(items)
+    leagues_for_sport = [l for l in ESPN_LEAGUES if l["sport_id"] == sport]
+    for league in leagues_for_sport:
+        try:
+            data = espn_scoreboard(sport, league["id"], espn_date(d))
+            items.extend(
+                fixture_from_espn(e, sport, league)
+                for e in data.get("events", [])
+            )
+        except Exception as e:
+            app.logger.warning("espn %s/%s %s failed: %s", sport, league["id"], d, e)
+            ok = False
+    if ok:
+        cache.put(cache_key, items)
+    return items
+
+
+@app.get("/fixtures/<sport>/<int:match_id>")
+def fixture_by_id(sport: str, match_id: int):
+    date_arg = request.args.get("date")
+    if not date_arg:
+        return {"error": "date query param required"}, 400
+    try:
+        d = date.fromisoformat(date_arg)
+    except ValueError:
+        return {"error": "date must be YYYY-MM-DD"}, 400
+
+    items = _fetch_fixtures_for_date(sport, d)
+    for item in items:
+        if item.get("id") == match_id:
+            return jsonify(item)
+    return {"error": "fixture not found"}, 404
 
 
 @app.get("/fixtures/<sport>/<fixture_id>/details")
@@ -134,7 +251,7 @@ def fixture_details(sport: str, fixture_id: str):
         try:
             stats_resp = api_football_get("/fixtures/statistics", params={"fixture": fixture_id})
             events_resp = api_football_get("/fixtures/events", params={"fixture": fixture_id})
-        except ProviderError as e:
+        except Exception as e:
             return {"error": str(e)}, 502
         payload = details_from_football(stats_resp, events_resp, home_id, away_id)
         payload["fixtureId"] = int(fixture_id)
@@ -150,12 +267,50 @@ def fixture_details(sport: str, fixture_id: str):
         return jsonify(cached)
     try:
         summary = espn_summary(sport, league_slug, fixture_id)
-    except ProviderError as e:
+    except Exception as e:
         return {"error": str(e)}, 502
     payload = details_from_espn(summary)
     payload["fixtureId"] = int(fixture_id)
     cache.put(cache_key, payload)
     return jsonify(payload)
+
+
+@app.post("/debug/notify")
+def debug_notify():
+    body = request.get_json(silent=True) or {}
+    match_id = int(body.get("matchId", 0))
+    sport = body.get("sport", "football")
+    fixture_date = body.get("date", date.today().isoformat())
+    title = body.get("title", "Test notification")
+    text = body.get("body", "Hello from backend")
+    if not match_id:
+        return {"error": "matchId required"}, 400
+    try:
+        msg_id = notify_match(match_id, title, text, sport=sport, fixture_date=fixture_date)
+    except Exception as e:
+        return {"error": str(e)}, 502
+    return {"sent": True, "fcm_message_id": msg_id}
+
+
+@app.post("/debug/notify-token")
+def debug_notify_token():
+    body = request.get_json(silent=True) or {}
+    token = body.get("token")
+    title = body.get("title", "Test notification")
+    text = body.get("body", "Direct to token")
+    sport = body.get("sport", "football")
+    fixture_date = body.get("date", date.today().isoformat())
+    match_id = int(body.get("matchId", 0))
+    if not token:
+        return {"error": "token required"}, 400
+    try:
+        msg_id = notify_token(
+            token, title, text,
+            sport=sport, fixture_date=fixture_date, match_id=match_id,
+        )
+    except Exception as e:
+        return {"error": str(e)}, 502
+    return {"sent": True, "fcm_message_id": msg_id}
 
 
 @app.post("/cache/invalidate")
@@ -199,6 +354,15 @@ def _device_fcm_token(device_id: str) -> str | None:
     with session_scope() as s:
         device = s.get(Device, device_id)
         return device.fcm_token if device else None
+
+
+@app.get("/devices/<device_id>/watchlist")
+def watchlist_list(device_id: str):
+    with session_scope() as s:
+        rows = s.query(Subscription.match_id).filter(
+            Subscription.device_id == device_id
+        ).all()
+        return jsonify([r[0] for r in rows])
 
 
 @app.put("/devices/<device_id>/watchlist/<int:match_id>")
@@ -253,22 +417,9 @@ def watchlist_unsubscribe(device_id: str):
     return {"deviceId": device_id, "matchId": match_id}
 
 
-def _parse_dates(arg: str | None) -> list[date]:
-    if arg:
-        parts = [p.strip() for p in arg.split(",") if p.strip()]
-        out = []
-        for p in parts:
-            try:
-                out.append(date.fromisoformat(p))
-            except ValueError:
-                pass
-        if out:
-            return out
-    today = date.today()
-    return [today - timedelta(days=1), today, today + timedelta(days=1)]
-
-
 def _resolve_country(raw: str) -> tuple[str, str]:
+    if raw == "World":
+        return "World", "World"
     if len(raw) == 2 and raw.isalpha():
         code = raw.upper()
     else:
@@ -283,7 +434,7 @@ def _lookup_code_by_name(name: str) -> str:
     if cached is None:
         try:
             data = api_football_get("/countries")
-        except ProviderError:
+        except Exception:
             return ""
         cached = [country_from_football(c) for c in data.get("response", [])]
         cached.append({"id": "World", "name": "World", "code": "World", "flag": "", "continent": "World"})
@@ -294,5 +445,5 @@ def _lookup_code_by_name(name: str) -> str:
     return ""
 
 if __name__ == "__main__":
-    init_db()
-    app.run(host="0.0.0.0", port=PORT, debug=DEBUG)
+    from waitress import serve
+    serve(app, host="0.0.0.0", port=PORT)

@@ -13,30 +13,18 @@ def as_map(v):
     return v if isinstance(v, dict) else {}
 
 
-def as_int(v, default=0):
-    if isinstance(v, int):
-        return v
-    if isinstance(v, float):
+def as_int(v):
+    try:
         return int(v)
-    if isinstance(v, str):
-        try:
-            return int(v)
-        except ValueError:
-            return default
-    return default
+    except Exception:
+        return 0
 
 
 def as_opt_int(v):
-    if isinstance(v, int):
-        return v
-    if isinstance(v, float):
+    try:
         return int(v)
-    if isinstance(v, str):
-        try:
-            return int(v)
-        except ValueError:
-            return None
-    return None
+    except Exception:
+        return None
 
 
 def venue_str(name: str, city: str) -> str:
@@ -54,10 +42,14 @@ def espn_status(status_type: dict) -> str:
         return STATUS_UPCOMING
     if state == "in":
         return STATUS_LIVE
-    if state == "post":
-        if "postpone" in name:
-            return STATUS_POSTPONED
-        if "cancel" in name:
-            return STATUS_CANCELLED
-        return STATUS_FINISHED
-    return STATUS_UNKNOWN
+    if state != "post":
+        return STATUS_UNKNOWN
+    if "postpone" in name:
+        return STATUS_POSTPONED
+    if "cancel" in name:
+        return STATUS_CANCELLED
+    return STATUS_FINISHED
+
+
+def espn_date(d) -> str:
+    return d.strftime("%Y%m%d")

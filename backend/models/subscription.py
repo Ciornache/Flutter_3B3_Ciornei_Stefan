@@ -1,12 +1,15 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db import Base
 
-from ._utils import utcnow
 from .device import Device
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class Subscription(Base):

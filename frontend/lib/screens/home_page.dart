@@ -6,9 +6,48 @@ import '../models/sport.dart';
 import '../models/continent.dart';
 import '../models/league.dart';
 import '../models/fixture.dart';
-import '../utils/db_init.dart' show fixtureBoxBySport;
+import '../services/backend_service.dart';
+import '../services/device_service.dart';
+import '../services/notification_service.dart';
 import '../widgets/fixture_card.dart';
 import 'match_detail_screen.dart';
+
+class _Envelope {
+  final int total;
+  final int totalPages;
+  final int page;
+  final List<Fixture> previous;
+  final List<Fixture> current;
+  final List<Fixture> next;
+
+  _Envelope({
+    required this.total,
+    required this.totalPages,
+    required this.page,
+    required this.previous,
+    required this.current,
+    required this.next,
+  });
+
+  factory _Envelope.fromJson(Map<String, dynamic> j) {
+    List<Fixture> parseList(dynamic v) {
+      if (v is! List) return const [];
+      return v
+          .cast<Map<String, dynamic>>()
+          .map(Fixture.fromJson)
+          .toList();
+    }
+
+    return _Envelope(
+      total: j['total'] as int,
+      totalPages: j['totalPages'] as int,
+      page: j['page'] as int,
+      previous: parseList(j['previous']),
+      current: parseList(j['current']),
+      next: parseList(j['next']),
+    );
+  }
+}
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
@@ -21,30 +60,35 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage>
     with SingleTickerProviderStateMixin {
-  static const int _pageSize = 20;
-
   late TabController _tabController;
 
   List<dynamic> _drawerElements = [];
   final Map<String, String> _filters = {};
-  List<Fixture> _currentFixtures = [];
-  Map<String, Country> _countryByCode = {};
   Sport? _selectedSport;
   bool _skippedCountry = false;
 
   int _level = 0;
+  bool _favouritesOn = false;
   final List<int> _pages = [0, 0, 0];
+  final List<_Envelope?> _envelopes = [null, null, null];
+  final List<bool> _loading = [false, false, false];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 3, vsync: this, initialIndex: 1);
     _tabController.addListener(() {
-      if (!_tabController.indexIsChanging) setState(() {});
+      if (_tabController.indexIsChanging) return;
+      setState(() {});
+      if (_envelopes[_tabController.index] == null) {
+        _fetchEnvelope(_tabController.index);
+      }
     });
     _loadDrawerElements();
-    _loadCountryLookup();
-    _reloadFixtures();
+    _fetchEnvelope(_tabController.index);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationService.handleInitialMessage();
+    });
   }
 
   @override
@@ -72,13 +116,6 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   int get _maxLevel => 1 + (_selectedSport?.drillPath.length ?? 0) - 1;
-
-  Future<void> _loadCountryLookup() async {
-    final box = await Hive.openBox<Country>('countries');
-    setState(() {
-      _countryByCode = {for (final c in box.values) c.code: c};
-    });
-  }
 
   Future<List<dynamic>> _openBoxValues(int level) async {
     if (level == 0) {
@@ -124,45 +161,59 @@ class _MyHomePageState extends State<MyHomePage>
     });
   }
 
-  Future<void> _reloadFixtures() async {
-    final sportId = _activeSport;
-    final List<Fixture> all = [];
+  DateTime _tabDate(int tabIndex) {
+    final now = DateTime.now();
+    if (tabIndex == 0) return now.subtract(const Duration(days: 1));
+    if (tabIndex == 2) return now.add(const Duration(days: 1));
+    return now;
+  }
 
-    if (sportId != null) {
-      final boxName = fixtureBoxBySport[sportId];
-      if (boxName != null) {
-        final box = await Hive.openBox<Fixture>(boxName);
-        all.addAll(box.values);
-      }
-    } else {
-      for (final boxName in fixtureBoxBySport.values) {
-        final box = await Hive.openBox<Fixture>(boxName);
-        all.addAll(box.values);
+  String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> _fetchEnvelope(int tabIndex, {int? page}) async {
+    final p = page ?? _pages[tabIndex];
+    setState(() => _loading[tabIndex] = true);
+
+    final query = <String, String>{
+      'date': _isoDate(_tabDate(tabIndex)),
+      'page': '$p',
+    };
+    if (_activeSport != null) query['sport'] = _activeSport!;
+    if (_activeCountry != null) query['country'] = _activeCountry!;
+    if (_activeContinent != null) query['continent'] = _activeContinent!;
+    if (_activeLeague != null) query['league'] = _activeLeague!;
+    if (_favouritesOn) {
+      final deviceId = DeviceService.cachedDeviceId;
+      if (deviceId != null) {
+        query['favourites'] = 'true';
+        query['deviceId'] = deviceId;
       }
     }
 
-    final continent = _activeContinent;
-    final country = _activeCountry;
-    final league = _activeLeague;
+    try {
+      final data = await BackendService.getJson('/fixtures', query: query);
+      final env = _Envelope.fromJson(data as Map<String, dynamic>);
+      if (!mounted) return;
+      setState(() {
+        _envelopes[tabIndex] = env;
+        _pages[tabIndex] = env.page;
+        _loading[tabIndex] = false;
+      });
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('[home_page] _fetchEnvelope($tabIndex) failed: $e\n$st');
+      if (!mounted) return;
+      setState(() => _loading[tabIndex] = false);
+    }
+  }
 
-    final filtered = all.where((f) {
-      if (country != null && f.countryCode != country) return false;
-      if (league != null && f.leagueId != league) return false;
-      if (continent != null) {
-        final c = _countryByCode[f.countryCode];
-        if (c == null || c.continent.toLowerCase() != continent.toLowerCase()) {
-          return false;
-        }
-      }
-      return true;
-    }).toList()..sort((a, b) => a.date.compareTo(b.date));
-
-    setState(() {
-      _currentFixtures = filtered;
-      for (var i = 0; i < _pages.length; i++) {
-        _pages[i] = 0;
-      }
-    });
+  void _resetAllAndFetch() {
+    for (var i = 0; i < 3; i++) {
+      _envelopes[i] = null;
+      _pages[i] = 0;
+    }
+    _fetchEnvelope(_tabController.index);
   }
 
   String _filterValueOf(dynamic element) {
@@ -190,7 +241,7 @@ class _MyHomePageState extends State<MyHomePage>
       if (leagueIdx >= 0) {
         _level = 1 + leagueIdx;
         _loadDrawerElements();
-        _reloadFixtures();
+        _resetAllAndFetch();
         return;
       }
     }
@@ -201,12 +252,12 @@ class _MyHomePageState extends State<MyHomePage>
     } else {
       setState(() {});
     }
-    _reloadFixtures();
+    _resetAllAndFetch();
   }
 
   void _deactivateLeague() {
     _filters.remove('league');
-    _reloadFixtures();
+    _resetAllAndFetch();
   }
 
   void _goBack() {
@@ -219,7 +270,7 @@ class _MyHomePageState extends State<MyHomePage>
       final continentIdx = path.indexOf(DrillLevel.continent);
       _level = continentIdx >= 0 ? 1 + continentIdx : 1;
       _loadDrawerElements();
-      _reloadFixtures();
+      _resetAllAndFetch();
       return;
     }
     if (_filters.isNotEmpty) {
@@ -228,7 +279,7 @@ class _MyHomePageState extends State<MyHomePage>
     if (_level > 0) _level--;
     if (_level == 0) _selectedSport = null;
     _loadDrawerElements();
-    _reloadFixtures();
+    _resetAllAndFetch();
   }
 
   Widget buildImage(dynamic element) {
@@ -241,6 +292,9 @@ class _MyHomePageState extends State<MyHomePage>
       );
     }
     if (element is League) {
+      if (element.logo.isEmpty) {
+        return const Icon(Icons.emoji_events, size: 32);
+      }
       return Image.network(
         element.logo,
         width: 32,
@@ -260,53 +314,55 @@ class _MyHomePageState extends State<MyHomePage>
     return const Icon(Icons.error);
   }
 
-  bool _sameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  List<Fixture> _fixturesForTab(int tabIndex) {
-    final now = DateTime.now();
-    final target = tabIndex == 0
-        ? now.subtract(const Duration(days: 1))
-        : tabIndex == 1
-        ? now
-        : now.add(const Duration(days: 1));
-    return _currentFixtures.where((f) => _sameDay(f.date, target)).toList();
+  List<Fixture> _displayFixtures(int tab) {
+    final env = _envelopes[tab];
+    if (env == null) return const [];
+    final p = _pages[tab];
+    if (p == env.page) return env.current;
+    if (p == env.page + 1) return env.next;
+    if (p == env.page - 1) return env.previous;
+    return const [];
   }
 
   Widget _buildFixtureList(int tabIndex) {
-    final fixtures = _fixturesForTab(tabIndex);
-    if (fixtures.isEmpty) {
+    final env = _envelopes[tabIndex];
+    final loading = _loading[tabIndex];
+    final fixtures = _displayFixtures(tabIndex);
+
+    if (env == null && loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (env == null) {
       return const Center(child: Text('No matches'));
     }
 
-    final totalPages = (fixtures.length / _pageSize).ceil();
-    final page = _pages[tabIndex].clamp(0, totalPages - 1);
-    final start = page * _pageSize;
-    final end = (start + _pageSize).clamp(0, fixtures.length);
-    final pageItems = fixtures.sublist(start, end);
-
-    return Column(
-      children: [
-        Expanded(
-          child: ListView.builder(
-            itemCount: pageItems.length,
+    final body = fixtures.isEmpty
+        ? const Center(child: Text('No matches'))
+        : ListView.builder(
+            itemCount: fixtures.length,
             itemBuilder: (_, i) => FixtureCard(
-              fixture: pageItems[i],
+              fixture: fixtures[i],
               sportFilterActive: _activeSport != null,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => MatchDetailScreen(fixture: pageItems[i]),
+                  builder: (_) => MatchDetailScreen(fixture: fixtures[i]),
                 ),
               ),
             ),
-          ),
-        ),
-        _paginationBar(tabIndex, page, totalPages, fixtures.length),
+          );
+
+    return Column(
+      children: [
+        Expanded(child: body),
+        _paginationBar(tabIndex, env, loading),
       ],
     );
   }
 
-  Widget _paginationBar(int tabIndex, int page, int totalPages, int total) {
+  Widget _paginationBar(int tabIndex, _Envelope env, bool loading) {
+    final page = _pages[tabIndex];
+    final total = env.total;
+    final totalPages = env.totalPages;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       child: Row(
@@ -314,15 +370,25 @@ class _MyHomePageState extends State<MyHomePage>
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed: page > 0
-                ? () => setState(() => _pages[tabIndex] = page - 1)
-                : null,
+            onPressed: page > 0 ? () => _goToPage(tabIndex, page - 1) : null,
           ),
-          Text('Page ${page + 1} of $totalPages  ($total)'),
+          Row(
+            children: [
+              Text('Page ${page + 1} of $totalPages  ($total)'),
+              if (loading) ...[
+                const SizedBox(width: 8),
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
             onPressed: page < totalPages - 1
-                ? () => setState(() => _pages[tabIndex] = page + 1)
+                ? () => _goToPage(tabIndex, page + 1)
                 : null,
           ),
         ],
@@ -330,11 +396,30 @@ class _MyHomePageState extends State<MyHomePage>
     );
   }
 
+  void _goToPage(int tabIndex, int newPage) {
+    setState(() => _pages[tabIndex] = newPage);
+    _fetchEnvelope(tabIndex, page: newPage);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
+        actions: [
+          IconButton(
+            icon: Icon(
+              _favouritesOn
+                  ? Icons.notifications
+                  : Icons.notifications_off_outlined,
+            ),
+            tooltip: 'Favourites',
+            onPressed: () {
+              setState(() => _favouritesOn = !_favouritesOn);
+              _resetAllAndFetch();
+            },
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [

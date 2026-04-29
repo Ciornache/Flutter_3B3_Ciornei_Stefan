@@ -4,15 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:sport_scores/screens/home_page.dart';
 import 'package:sport_scores/services/device_service.dart';
+import 'package:sport_scores/services/notification_service.dart';
 import 'package:sport_scores/utils/db_init.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
   await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(firebaseBackgroundHandler);
   await FirebaseMessaging.instance.requestPermission();
   await initializeDatabase();
   await DeviceService.register();
+  await NotificationService.init();
   runApp(const MyApp());
 }
 
@@ -22,6 +25,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: NotificationService.navigatorKey,
       title: 'Flutter Demo',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),

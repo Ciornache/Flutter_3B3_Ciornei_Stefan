@@ -5,7 +5,6 @@ import '../models/continent.dart';
 import '../models/country.dart';
 import '../models/league.dart';
 import '../models/match_details.dart';
-import '../models/fixture.dart';
 import '../services/backend_service.dart';
 
 final List<Sport> sports = [
@@ -31,27 +30,11 @@ void _registerAdapters() {
   if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(LeagueAdapter());
   if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(SportAdapter());
   if (!Hive.isAdapterRegistered(3)) Hive.registerAdapter(ContinentAdapter());
-  if (!Hive.isAdapterRegistered(4)) Hive.registerAdapter(FixtureAdapter());
   if (!Hive.isAdapterRegistered(5)) Hive.registerAdapter(MatchDetailsAdapter());
 }
 
-const List<String> _allSports = [
-  'football',
-  'american_football',
-  'basketball',
-  'hockey',
-];
-
-const Map<String, String> fixtureBoxBySport = {
-  'football': 'fixtures_football',
-  'american_football': 'fixtures_american_football',
-  'basketball': 'fixtures_basketball',
-  'hockey': 'fixtures_hockey',
-};
-
 const Duration _countriesTtl = Duration(days: 30);
 const Duration _leaguesTtl = Duration(days: 7);
-const Duration _fixturesTtl = Duration(days: 1);
 
 bool _isStale(Box meta, String key, Duration ttl) {
   final raw = meta.get(key);
@@ -70,7 +53,7 @@ Future<void> initializeDatabase() async {
 
   final metaBox = await Hive.openBox('meta');
 
-  const schemaVersion = 12;
+  const schemaVersion = 14;
   if (metaBox.get('schema_version') != schemaVersion) {
     await Hive.deleteBoxFromDisk('countries');
     await Hive.deleteBoxFromDisk('leagues');
@@ -79,7 +62,12 @@ Future<void> initializeDatabase() async {
     await Hive.deleteBoxFromDisk('match_details');
     await metaBox.delete('countries_synced_at');
     await metaBox.delete('leagues_synced_at');
-    for (final name in fixtureBoxBySport.values) {
+    for (final name in const [
+      'fixtures_football',
+      'fixtures_american_football',
+      'fixtures_basketball',
+      'fixtures_hockey',
+    ]) {
       await Hive.deleteBoxFromDisk(name);
       await metaBox.delete('${name}_synced_at');
     }
@@ -110,27 +98,7 @@ Future<void> initializeDatabase() async {
       _isStale(metaBox, 'leagues_synced_at', _leaguesTtl)) {
     await _syncLeagues(leagueBox, metaBox);
   }
-
-  final today = DateTime.now();
-  final dates = [
-    today.subtract(const Duration(days: 1)),
-    today,
-    today.add(const Duration(days: 1)),
-  ];
-
-  for (final sportId in _allSports) {
-    final boxName = fixtureBoxBySport[sportId]!;
-    final box = await Hive.openBox<Fixture>(boxName);
-    final metaKey = '${boxName}_synced_at';
-
-    if (box.isEmpty || _isStale(metaBox, metaKey, _fixturesTtl)) {
-      await _syncFixtures(sportId, box, metaBox, metaKey, dates);
-    }
-  }
 }
-
-String _fmtIsoDate(DateTime d) =>
-    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 Future<void> _syncCountries(Box<Country> box, Box meta) async {
   try {
@@ -142,7 +110,10 @@ Future<void> _syncCountries(Box<Country> box, Box meta) async {
       await box.put(country.code.isNotEmpty ? country.code : country.id, country);
     }
     await _markSynced(meta, 'countries_synced_at');
-  } catch (_) {}
+  } catch (e, st) {
+    // ignore: avoid_print
+    print('[db_init] _syncCountries failed: $e\n$st');
+  }
 }
 
 Future<void> _syncLeagues(Box<League> box, Box meta) async {
@@ -155,28 +126,8 @@ Future<void> _syncLeagues(Box<League> box, Box meta) async {
       await box.put(league.id, league);
     }
     await _markSynced(meta, 'leagues_synced_at');
-  } catch (_) {}
-}
-
-Future<void> _syncFixtures(
-  String sportId,
-  Box<Fixture> box,
-  Box meta,
-  String metaKey,
-  List<DateTime> dates,
-) async {
-  final datesParam = dates.map(_fmtIsoDate).join(',');
-  try {
-    final data = await BackendService.getJson(
-      '/fixtures',
-      query: {'sport': sportId, 'dates': datesParam},
-    );
-    final list = (data as List).cast<Map<String, dynamic>>();
-    await box.clear();
-    for (final f in list) {
-      final fixture = Fixture.fromJson(f);
-      await box.put(fixture.id, fixture);
-    }
-    await _markSynced(meta, metaKey);
-  } catch (_) {}
+  } catch (e, st) {
+    // ignore: avoid_print
+    print('[db_init] _syncLeagues failed: $e\n$st');
+  }
 }

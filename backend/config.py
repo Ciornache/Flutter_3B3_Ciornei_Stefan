@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "")
-API_FOOTBALL_KEY_SECONDARY = os.getenv("API_FOOTBALL_KEY_SECONDARY", "")
 API_FOOTBALL_BASE_URL = os.getenv(
     "API_FOOTBALL_BASE_URL", "https://v3.football.api-sports.io"
 ).rstrip("/")
@@ -63,14 +62,14 @@ ESPN_LOGO_BASE = "https://a.espncdn.com/i/teamlogos/leagues/500"
 ESPN_LEAGUES = [
     {"id": "nba", "name": "NBA", "sport_id": "basketball", "logo": f"{ESPN_LOGO_BASE}/nba.png"},
     {"id": "wnba", "name": "WNBA", "sport_id": "basketball", "logo": f"{ESPN_LOGO_BASE}/wnba.png"},
-    {"id": "mens-college-basketball", "name": "NCAA Men's Basketball", "sport_id": "basketball", "logo": f"{ESPN_LOGO_BASE}/ncaa.png"},
-    {"id": "womens-college-basketball", "name": "NCAA Women's Basketball", "sport_id": "basketball", "logo": f"{ESPN_LOGO_BASE}/ncaa.png"},
+    {"id": "mens-college-basketball", "name": "NCAA Men's Basketball", "sport_id": "basketball", "logo": ""},
+    {"id": "womens-college-basketball", "name": "NCAA Women's Basketball", "sport_id": "basketball", "logo": ""},
     {"id": "nbl", "name": "NBL (Australia)", "sport_id": "basketball", "logo": f"{ESPN_LOGO_BASE}/nbl.png"},
     {"id": "nfl", "name": "NFL", "sport_id": "american_football", "logo": f"{ESPN_LOGO_BASE}/nfl.png"},
-    {"id": "college-football", "name": "NCAA Football", "sport_id": "american_football", "logo": f"{ESPN_LOGO_BASE}/ncaa.png"},
+    {"id": "college-football", "name": "NCAA Football", "sport_id": "american_football", "logo": ""},
     {"id": "nhl", "name": "NHL", "sport_id": "hockey", "logo": f"{ESPN_LOGO_BASE}/nhl.png"},
-    {"id": "mens-college-hockey", "name": "NCAA Men's Hockey", "sport_id": "hockey", "logo": f"{ESPN_LOGO_BASE}/ncaa.png"},
-    {"id": "womens-college-hockey", "name": "NCAA Women's Hockey", "sport_id": "hockey", "logo": f"{ESPN_LOGO_BASE}/ncaa.png"},
+    {"id": "mens-college-hockey", "name": "NCAA Men's Hockey", "sport_id": "hockey", "logo": ""},
+    {"id": "womens-college-hockey", "name": "NCAA Women's Hockey", "sport_id": "hockey", "logo": ""},
 ]
 
 SPORT_TO_ESPN_SLUG = {
@@ -80,6 +79,7 @@ SPORT_TO_ESPN_SLUG = {
 }
 
 COUNTRY_CONTINENT = {
+    "World": "World",
     "GB": "Europe", "FR": "Europe", "DE": "Europe", "IT": "Europe", "ES": "Europe",
     "PT": "Europe", "NL": "Europe", "BE": "Europe", "CH": "Europe", "AT": "Europe",
     "PL": "Europe", "CZ": "Europe", "SE": "Europe", "NO": "Europe", "DK": "Europe",

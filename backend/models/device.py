@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String
@@ -6,10 +6,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db import Base
 
-from ._utils import utcnow
-
 if TYPE_CHECKING:
     from .subscription import Subscription
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class Device(Base):

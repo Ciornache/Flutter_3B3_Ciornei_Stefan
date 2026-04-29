@@ -1,4 +1,3 @@
-import 'package:hive/hive.dart';
 import 'status.dart';
 
 class Fixture {
@@ -88,57 +87,3 @@ DateTime _asDate(dynamic v) {
   return DateTime.now();
 }
 
-class FixtureAdapter extends TypeAdapter<Fixture> {
-  @override
-  final int typeId = 4;
-
-  @override
-  Fixture read(BinaryReader r) {
-    return Fixture(
-      id: r.readInt(),
-      sport: r.readString(),
-      date: DateTime.fromMillisecondsSinceEpoch(r.readInt()),
-      leagueId: r.readString(),
-      leagueName: r.readString(),
-      leagueLogo: r.readString(),
-      countryCode: r.readString(),
-      continent: r.readString(),
-      statusText: r.readString(),
-      status: MatchStatus.values[r.readInt()],
-      venue: r.readString(),
-      homeTeamId: r.readInt(),
-      homeTeamName: r.readString(),
-      homeTeamLogo: r.readString(),
-      awayTeamId: r.readInt(),
-      awayTeamName: r.readString(),
-      awayTeamLogo: r.readString(),
-      homeScore: r.readBool() ? r.readInt() : null,
-      awayScore: r.readBool() ? r.readInt() : null,
-    );
-  }
-
-  @override
-  void write(BinaryWriter w, Fixture f) {
-    w.writeInt(f.id);
-    w.writeString(f.sport);
-    w.writeInt(f.date.millisecondsSinceEpoch);
-    w.writeString(f.leagueId);
-    w.writeString(f.leagueName);
-    w.writeString(f.leagueLogo);
-    w.writeString(f.countryCode);
-    w.writeString(f.continent);
-    w.writeString(f.statusText);
-    w.writeInt(f.status.index);
-    w.writeString(f.venue);
-    w.writeInt(f.homeTeamId);
-    w.writeString(f.homeTeamName);
-    w.writeString(f.homeTeamLogo);
-    w.writeInt(f.awayTeamId);
-    w.writeString(f.awayTeamName);
-    w.writeString(f.awayTeamLogo);
-    w.writeBool(f.homeScore != null);
-    if (f.homeScore != null) w.writeInt(f.homeScore!);
-    w.writeBool(f.awayScore != null);
-    if (f.awayScore != null) w.writeInt(f.awayScore!);
-  }
-}
