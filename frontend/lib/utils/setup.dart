@@ -1,17 +1,41 @@
+import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/sport.dart';
 import '../models/continent.dart';
 import '../models/country.dart';
 import '../models/league.dart';
-import '../models/match_details.dart';
+import '../models/details/match_details.dart';
 import '../services/backend_service.dart';
+
+const Map<String, IconData> _sportIcons = {
+  'football': Icons.sports_soccer,
+  'american_football': Icons.sports_football,
+  'basketball': Icons.sports_basketball,
+  'hockey': Icons.sports_hockey,
+  'baseball': Icons.sports_baseball,
+};
+
+const Map<String, List<DrillLevel>> _sportDrillPaths = {
+  'football': [DrillLevel.continent, DrillLevel.country, DrillLevel.league],
+  'american_football': [DrillLevel.league],
+  'basketball': [DrillLevel.league],
+  'hockey': [DrillLevel.league],
+  'baseball': [DrillLevel.league],
+};
+
+Icon iconFor(Sport sport) =>
+    Icon(_sportIcons[sport.iconKey] ?? Icons.sports);
+
+List<DrillLevel> drillPathOf(Sport? sport) =>
+    sport == null ? const [] : (_sportDrillPaths[sport.id] ?? const []);
 
 final List<Sport> sports = [
   Sport(id: 'football', name: 'Football', iconKey: 'football'),
   Sport(id: 'american_football', name: 'American Football', iconKey: 'american_football'),
   Sport(id: 'basketball', name: 'Basketball', iconKey: 'basketball'),
   Sport(id: 'hockey', name: 'Hockey', iconKey: 'hockey'),
+  Sport(id: 'baseball', name: 'Baseball', iconKey: 'baseball'),
 ];
 
 final List<Continent> continents = [
@@ -53,7 +77,7 @@ Future<void> initializeDatabase() async {
 
   final metaBox = await Hive.openBox('meta');
 
-  const schemaVersion = 14;
+  const schemaVersion = 15;
   if (metaBox.get('schema_version') != schemaVersion) {
     await Hive.deleteBoxFromDisk('countries');
     await Hive.deleteBoxFromDisk('leagues');
@@ -67,6 +91,7 @@ Future<void> initializeDatabase() async {
       'fixtures_american_football',
       'fixtures_basketball',
       'fixtures_hockey',
+      'fixtures_baseball',
     ]) {
       await Hive.deleteBoxFromDisk(name);
       await metaBox.delete('${name}_synced_at');
@@ -102,8 +127,10 @@ Future<void> initializeDatabase() async {
 
 Future<void> _syncCountries(Box<Country> box, Box meta) async {
   try {
-    final data = await BackendService.getJson('/countries');
-    final list = (data as List).cast<Map<String, dynamic>>();
+    final list = ((await BackendService.get(
+      '/countries',
+      errorMessage: 'Failed to load countries',
+    )) as List).cast<Map<String, dynamic>>();
     await box.clear();
     for (final c in list) {
       final country = Country.fromJson(c);
@@ -112,14 +139,16 @@ Future<void> _syncCountries(Box<Country> box, Box meta) async {
     await _markSynced(meta, 'countries_synced_at');
   } catch (e, st) {
     // ignore: avoid_print
-    print('[db_init] _syncCountries failed: $e\n$st');
+    print('[setup] _syncCountries failed: $e\n$st');
   }
 }
 
 Future<void> _syncLeagues(Box<League> box, Box meta) async {
   try {
-    final data = await BackendService.getJson('/leagues');
-    final list = (data as List).cast<Map<String, dynamic>>();
+    final list = ((await BackendService.get(
+      '/leagues',
+      errorMessage: 'Failed to load leagues',
+    )) as List).cast<Map<String, dynamic>>();
     await box.clear();
     for (final l in list) {
       final league = League.fromJson(l);
@@ -128,6 +157,6 @@ Future<void> _syncLeagues(Box<League> box, Box meta) async {
     await _markSynced(meta, 'leagues_synced_at');
   } catch (e, st) {
     // ignore: avoid_print
-    print('[db_init] _syncLeagues failed: $e\n$st');
+    print('[setup] _syncLeagues failed: $e\n$st');
   }
 }

@@ -99,12 +99,12 @@ class EspnWorker(Worker):
                     sport=sport_id, fixture_date=fixture_date,
                 )
 
-        for match_id in self._close_missing(provider, live_ids):
-            meta = self._fixture_meta.pop((match_id, provider), None)
+        for fixture_id in self._close_missing(provider, live_ids):
+            meta = self._fixture_meta.pop((fixture_id, provider), None)
             if meta is None:
                 continue
             self._send_lifecycle(
-                match_id, "Match ended",
+                fixture_id, "Match ended",
                 meta["home"], meta["away"], meta["sport"], meta["date"],
             )
 

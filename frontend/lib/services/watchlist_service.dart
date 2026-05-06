@@ -1,7 +1,6 @@
 import 'package:hive/hive.dart';
-import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'backend_service.dart';
 import 'device_service.dart';
 
 class WatchlistService {
@@ -12,8 +11,6 @@ class WatchlistService {
   static bool isWatching(int matchId) => _box.containsKey(matchId);
 
   static Iterable<int> all() => _box.keys.cast<int>();
-
-  static String get _baseUrl => dotenv.env['BACKEND_BASE_URL']!;
 
   static Future<void> toggle(int matchId) async {
     final deviceId = DeviceService.cachedDeviceId;
@@ -31,19 +28,17 @@ class WatchlistService {
   }
 
   static Future<void> _subscribe(String deviceId, int matchId) async {
-    final url = Uri.parse('$_baseUrl/devices/$deviceId/watchlist/$matchId');
-    final resp = await http.put(url);
-    if (resp.statusCode != 200) {
-      throw Exception('Subscribe failed ${resp.statusCode}: ${resp.body}');
-    }
+    await BackendService.put(
+      '/devices/$deviceId/watchlist/$matchId',
+      errorMessage: 'Subscribe failed',
+    );
   }
 
   static Future<void> _unsubscribe(String deviceId, int matchId) async {
-    final url = Uri.parse('$_baseUrl/devices/$deviceId/watchlist')
-        .replace(queryParameters: {'matchId': matchId.toString()});
-    final resp = await http.delete(url);
-    if (resp.statusCode != 200) {
-      throw Exception('Unsubscribe failed ${resp.statusCode}: ${resp.body}');
-    }
+    await BackendService.delete(
+      '/devices/$deviceId/watchlist',
+      query: {'matchId': matchId.toString()},
+      errorMessage: 'Unsubscribe failed',
+    );
   }
 }

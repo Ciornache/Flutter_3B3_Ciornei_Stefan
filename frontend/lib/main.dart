@@ -5,7 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:sport_scores/screens/home_page.dart';
 import 'package:sport_scores/services/device_service.dart';
 import 'package:sport_scores/services/notification_service.dart';
-import 'package:sport_scores/utils/db_init.dart';
+import 'package:sport_scores/utils/setup.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,7 +26,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: NotificationService.navigatorKey,
-      title: 'Flutter Demo',
+      title: 'Sport Scores',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),

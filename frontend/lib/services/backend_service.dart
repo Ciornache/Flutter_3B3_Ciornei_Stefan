@@ -11,12 +11,77 @@ class BackendService {
     );
   }
 
-  static Future<dynamic> getJson(String path, {Map<String, String>? query}) async {
-    final url = _uri(path, query);
-    final response = await http.get(url);
-    if (response.statusCode != 200) {
-        throw Exception('GET $url failed ${response.statusCode}: ${response.body}');
+  static dynamic _decode(String body) {
+    if (body.isEmpty) return null;
+    return jsonDecode(body);
+  }
+
+  static Map<String, String>? _jsonHeaders(Object? body) =>
+      body == null ? null : const {'Content-Type': 'application/json'};
+
+  static String? _encodeBody(Object? body) =>
+      body == null ? null : jsonEncode(body);
+
+  static Future<dynamic> get(
+    String path, {
+    Map<String, String>? query,
+    required String errorMessage,
+  }) async {
+    final resp = await http.get(_uri(path, query));
+    if (resp.statusCode != 200) {
+      throw Exception('$errorMessage (${resp.statusCode}): ${resp.body}');
     }
-    return jsonDecode(response.body);
+    return _decode(resp.body);
+  }
+
+  static Future<dynamic> post(
+    String path, {
+    Map<String, String>? query,
+    Object? body,
+    required String errorMessage,
+  }) async {
+    final resp = await http.post(
+      _uri(path, query),
+      headers: _jsonHeaders(body),
+      body: _encodeBody(body),
+    );
+    if (resp.statusCode != 200) {
+      throw Exception('$errorMessage (${resp.statusCode}): ${resp.body}');
+    }
+    return _decode(resp.body);
+  }
+
+  static Future<dynamic> put(
+    String path, {
+    Map<String, String>? query,
+    Object? body,
+    required String errorMessage,
+  }) async {
+    final resp = await http.put(
+      _uri(path, query),
+      headers: _jsonHeaders(body),
+      body: _encodeBody(body),
+    );
+    if (resp.statusCode != 200) {
+      throw Exception('$errorMessage (${resp.statusCode}): ${resp.body}');
+    }
+    return _decode(resp.body);
+  }
+
+  static Future<dynamic> delete(
+    String path, {
+    Map<String, String>? query,
+    Object? body,
+    required String errorMessage,
+  }) async {
+    final resp = await http.delete(
+      _uri(path, query),
+      headers: _jsonHeaders(body),
+      body: _encodeBody(body),
+    );
+    if (resp.statusCode != 200) {
+      throw Exception('$errorMessage (${resp.statusCode}): ${resp.body}');
+    }
+    return _decode(resp.body);
   }
 }

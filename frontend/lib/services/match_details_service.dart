@@ -1,7 +1,7 @@
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/fixture.dart';
-import '../models/match_details.dart';
+import '../models/details/match_details.dart';
 import '../models/status.dart';
 import 'backend_service.dart';
 
@@ -26,11 +26,11 @@ class MatchDetailsService {
         query['league'] = fixture.leagueId;
       }
 
-      final data = await BackendService.getJson(
+      final json = ((await BackendService.get(
         '/fixtures/${fixture.sport}/${fixture.id}/details',
         query: query,
-      );
-      final json = (data as Map).cast<String, dynamic>();
+        errorMessage: 'Failed to load match details',
+      )) as Map).cast<String, dynamic>();
       final details = _parse(fixture.id, json);
       final hasData = details.stats.isNotEmpty || details.plays.isNotEmpty;
       if (fixture.status == MatchStatus.finished && hasData) {

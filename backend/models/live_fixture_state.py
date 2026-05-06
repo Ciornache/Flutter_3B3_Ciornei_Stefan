@@ -14,7 +14,7 @@ def utcnow() -> datetime:
 class LiveFixtureState(Base):
     __tablename__ = "live_fixture_state"
 
-    match_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    fixture_id: Mapped[int] = mapped_column("match_id", Integer, primary_key=True)
     provider: Mapped[str] = mapped_column(String, primary_key=True)
     event_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_event_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)

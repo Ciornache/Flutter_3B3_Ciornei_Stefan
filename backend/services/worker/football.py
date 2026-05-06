@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from db import session_scope
 from mappers._utils import as_int, as_map
@@ -48,7 +48,7 @@ class FootballWorker(Worker):
             home_team = str(as_map(teams.get("home")).get("name") or "")
             away_team = str(as_map(teams.get("away")).get("name") or "")
 
-            events = self._fetch_events(fixture_id, fm.get("events"))
+            events = [e for e in (fm.get("events") or []) if isinstance(e, dict)]
 
             with session_scope() as s:
                 state, just_created = self._get_or_create_state(s, fixture_id, self.provider)
@@ -77,25 +77,14 @@ class FootballWorker(Worker):
                     sport="football", fixture_date=fixture_date,
                 )
 
-        for match_id in self._close_missing(self.provider, live_ids):
-            meta = self._fixture_meta.pop(match_id, None)
+        for fixture_id in self._close_missing(self.provider, live_ids):
+            meta = self._fixture_meta.pop(fixture_id, None)
             if meta is None:
                 continue
             self._send_lifecycle(
-                match_id, "Match ended",
+                fixture_id, "Match ended",
                 meta["home"], meta["away"], "football", meta["date"],
             )
-
-    def _fetch_events(self, fixture_id: int, inline: Any) -> list[dict]:
-        if isinstance(inline, list) and inline:
-            return [e for e in inline if isinstance(e, dict)]
-        try:
-            resp = api_football_get("/fixtures/events", params={"fixture": fixture_id})
-        except Exception as e:
-            self.log.warning("events fetch failed for %s: %s", fixture_id, e)
-            return []
-        data = resp.get("response") if isinstance(resp, dict) else []
-        return [e for e in (data or []) if isinstance(e, dict)]
 
     def _event_key(self, event: dict) -> str:
         time_map = as_map(event.get("time"))

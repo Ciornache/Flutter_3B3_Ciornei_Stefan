@@ -1,20 +1,10 @@
 import 'package:hive/hive.dart';
 
-class StatRow {
-  final String label;
-  final String home;
-  final String away;
+import 'stat_row.dart';
+import 'match_play.dart';
 
-  StatRow({required this.label, required this.home, required this.away});
-}
-
-class MatchPlay {
-  final String text;
-  final String period;
-  final String clock;
-
-  MatchPlay({required this.text, required this.period, required this.clock});
-}
+export 'stat_row.dart';
+export 'match_play.dart';
 
 class MatchDetails {
   final int fixtureId;

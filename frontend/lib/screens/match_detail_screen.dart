@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/fixture.dart';
-import '../models/match_details.dart';
+import '../models/details/match_details.dart';
 import '../models/status.dart';
 import '../services/match_details_service.dart';
 import '../services/watchlist_service.dart';

@@ -1,32 +1,32 @@
+import logging
 from datetime import date, datetime, timezone
+
 from flask import Flask, jsonify, request
 
 import cache
 from config import (
     CONTINENTS,
     COUNTRIES_TTL,
-    COUNTRY_CONTINENT,
     DEBUG,
     DETAILS_FINISHED_TTL,
     DETAILS_LIVE_TTL,
     ESPN_LEAGUES,
-    FIXTURES_TTL,
+    FIXTURES_PAGE_SIZE,
     LEAGUES_TTL,
     PORT,
     SPORTS,
 )
 from db import init_db, session_scope
-from mappers._utils import espn_date
 from mappers.country import country_from_football
 from mappers.details import details_from_espn, details_from_football
-from mappers.fixture import fixture_from_espn, fixture_from_football
 from mappers.league import league_from_football, league_from_seed
 from models import Device, Subscription
-from services.api_service import (
-    api_football_get,
-    espn_scoreboard,
-    espn_summary,
+from route_helpers import (
+    device_fcm_token,
+    fetch_fixtures_for_date,
+    start_workers,
 )
+from services.api_service import api_football_get, espn_summary
 from services.notifications import (
     init_firebase,
     notify_match,
@@ -34,32 +34,18 @@ from services.notifications import (
     subscribe_token,
     unsubscribe_token,
 )
-from services.worker import EspnWorker, FootballWorker, Worker
 
-import logging
-import threading
 
 app = Flask(__name__)
 
 init_db()
 init_firebase()
 
-
-def _start_workers() -> list[threading.Thread]:
-    workers: list[Worker] = [FootballWorker(), EspnWorker()]
-    threads: list[threading.Thread] = []
-    for w in workers:
-        t = threading.Thread(target=w.run, name=f"{w.name}-events", daemon=True)
-        t.start()
-        threads.append(t)
-    return threads
-
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
-_worker_threads = _start_workers()
+_worker_threads = start_workers()
 logging.info("workers started: %d", len(_worker_threads))
 
 
@@ -109,10 +95,6 @@ def leagues():
     return jsonify(items)
 
 
-
-FIXTURES_PAGE_SIZE = 20
-
-
 @app.get("/fixtures")
 def fixtures():
     sport = request.args.get("sport") or None
@@ -122,13 +104,7 @@ def fixtures():
     league = request.args.get("league") or None
     favourites = (request.args.get("favourites") or "").lower() == "true"
     device_id = request.args.get("deviceId") or None
-
-    try:
-        page = int(request.args.get("page", "0"))
-    except ValueError:
-        page = 0
-    if page < 0:
-        page = 0
+    page = int(request.args.get("page", "0"))
 
     try:
         d = date.fromisoformat(date_arg) if date_arg else date.today()
@@ -138,7 +114,7 @@ def fixtures():
     favourite_ids: set[int] | None = None
     if favourites and device_id:
         with session_scope() as s:
-            rows = s.query(Subscription.match_id).filter(
+            rows = s.query(Subscription.fixture_id).filter(
                 Subscription.device_id == device_id
             ).all()
             favourite_ids = {r[0] for r in rows}
@@ -146,7 +122,7 @@ def fixtures():
     sports_to_fetch = [sport] if sport else [s["id"] for s in SPORTS]
     items: list[dict] = []
     for sp in sports_to_fetch:
-        items.extend(_fetch_fixtures_for_date(sp, d))
+        items.extend(fetch_fixtures_for_date(sp, d))
 
     items = [
         f for f in items
@@ -159,68 +135,22 @@ def fixtures():
 
     total = len(items)
     total_pages = (total + FIXTURES_PAGE_SIZE - 1) // FIXTURES_PAGE_SIZE
-    if total_pages == 0:
-        total_pages = 1
-    if page >= total_pages:
-        page = total_pages - 1
-
-    def slice_page(p: int) -> list[dict] | None:
-        if p < 0 or p >= total_pages:
-            return None
-        start = p * FIXTURES_PAGE_SIZE
-        return items[start : start + FIXTURES_PAGE_SIZE]
+    total_pages = max(total_pages, 1)
+    page = min(max(page, 0), total_pages - 1)
+    start_idx = page * FIXTURES_PAGE_SIZE
+    fixtures = items[start_idx : start_idx + FIXTURES_PAGE_SIZE]
 
     return jsonify({
         "total": total,
         "totalPages": total_pages,
         "page": page,
         "pageSize": FIXTURES_PAGE_SIZE,
-        "previous": slice_page(page - 1),
-        "current": slice_page(page) or [],
-        "next": slice_page(page + 1),
+        "fixtures": fixtures,
     })
 
 
-def _fetch_fixtures_for_date(sport: str, d: date) -> list[dict]:
-    cache_key = f"fixtures_raw:{sport}:{d.isoformat()}"
-    cached = cache.get(cache_key, FIXTURES_TTL)
-    if isinstance(cached, list):
-        return cached
-
-    items: list[dict] = []
-    ok = True
-    if sport == "football":
-        try:
-            data = api_football_get("/fixtures", params={"date": d.isoformat()})
-            items.extend(
-                fixture_from_football(f, _resolve_country)
-                for f in data.get("response", [])
-            )
-        except Exception as e:
-            app.logger.warning("football fixtures %s failed: %s", d, e)
-            ok = False
-        if ok:
-            cache.put(cache_key, items)
-        return items
-
-    leagues_for_sport = [l for l in ESPN_LEAGUES if l["sport_id"] == sport]
-    for league in leagues_for_sport:
-        try:
-            data = espn_scoreboard(sport, league["id"], espn_date(d))
-            items.extend(
-                fixture_from_espn(e, sport, league)
-                for e in data.get("events", [])
-            )
-        except Exception as e:
-            app.logger.warning("espn %s/%s %s failed: %s", sport, league["id"], d, e)
-            ok = False
-    if ok:
-        cache.put(cache_key, items)
-    return items
-
-
-@app.get("/fixtures/<sport>/<int:match_id>")
-def fixture_by_id(sport: str, match_id: int):
+@app.get("/fixtures/<sport>/<int:fixture_id>")
+def fixture_by_id(sport: str, fixture_id: int):
     date_arg = request.args.get("date")
     if not date_arg:
         return {"error": "date query param required"}, 400
@@ -229,9 +159,9 @@ def fixture_by_id(sport: str, match_id: int):
     except ValueError:
         return {"error": "date must be YYYY-MM-DD"}, 400
 
-    items = _fetch_fixtures_for_date(sport, d)
+    items = fetch_fixtures_for_date(sport, d)
     for item in items:
-        if item.get("id") == match_id:
+        if item.get("id") == fixture_id:
             return jsonify(item)
     return {"error": "fixture not found"}, 404
 
@@ -278,36 +208,15 @@ def fixture_details(sport: str, fixture_id: str):
 @app.post("/debug/notify")
 def debug_notify():
     body = request.get_json(silent=True) or {}
-    match_id = int(body.get("matchId", 0))
+    fixture_id = int(body.get("matchId", 0))
     sport = body.get("sport", "football")
     fixture_date = body.get("date", date.today().isoformat())
     title = body.get("title", "Test notification")
     text = body.get("body", "Hello from backend")
-    if not match_id:
+    if not fixture_id:
         return {"error": "matchId required"}, 400
     try:
-        msg_id = notify_match(match_id, title, text, sport=sport, fixture_date=fixture_date)
-    except Exception as e:
-        return {"error": str(e)}, 502
-    return {"sent": True, "fcm_message_id": msg_id}
-
-
-@app.post("/debug/notify-token")
-def debug_notify_token():
-    body = request.get_json(silent=True) or {}
-    token = body.get("token")
-    title = body.get("title", "Test notification")
-    text = body.get("body", "Direct to token")
-    sport = body.get("sport", "football")
-    fixture_date = body.get("date", date.today().isoformat())
-    match_id = int(body.get("matchId", 0))
-    if not token:
-        return {"error": "token required"}, 400
-    try:
-        msg_id = notify_token(
-            token, title, text,
-            sport=sport, fixture_date=fixture_date, match_id=match_id,
-        )
+        msg_id = notify_match(fixture_id, title, text, sport=sport, fixture_date=fixture_date)
     except Exception as e:
         return {"error": str(e)}, 502
     return {"sent": True, "fcm_message_id": msg_id}
@@ -350,29 +259,23 @@ def register_device():
     return {"deviceId": device_id, "registered": True}
 
 
-def _device_fcm_token(device_id: str) -> str | None:
-    with session_scope() as s:
-        device = s.get(Device, device_id)
-        return device.fcm_token if device else None
-
-
 @app.get("/devices/<device_id>/watchlist")
 def watchlist_list(device_id: str):
     with session_scope() as s:
-        rows = s.query(Subscription.match_id).filter(
+        rows = s.query(Subscription.fixture_id).filter(
             Subscription.device_id == device_id
         ).all()
         return jsonify([r[0] for r in rows])
 
 
-@app.put("/devices/<device_id>/watchlist/<int:match_id>")
-def watchlist_subscribe(device_id: str, match_id: int):
-    fcm_token = _device_fcm_token(device_id)
+@app.put("/devices/<device_id>/watchlist/<int:fixture_id>")
+def watchlist_subscribe(device_id: str, fixture_id: int):
+    fcm_token = device_fcm_token(device_id)
     if fcm_token is None:
         return {"error": "device not registered"}, 404
 
     try:
-        subscribe_token(fcm_token, match_id)
+        subscribe_token(fcm_token, fixture_id)
     except RuntimeError as e:
         return {"error": str(e)}, 503
     except Exception as e:
@@ -380,69 +283,38 @@ def watchlist_subscribe(device_id: str, match_id: int):
         return {"error": str(e)}, 502
 
     with session_scope() as s:
-        existing = s.get(Subscription, (device_id, match_id))
+        existing = s.get(Subscription, (device_id, fixture_id))
         if existing is None:
-            s.add(Subscription(device_id=device_id, match_id=match_id))
+            s.add(Subscription(device_id=device_id, fixture_id=fixture_id))
 
-    return {"deviceId": device_id, "matchId": match_id}
+    return {"deviceId": device_id, "matchId": fixture_id}
 
 
 @app.delete("/devices/<device_id>/watchlist")
 def watchlist_unsubscribe(device_id: str):
-    match_id_raw = request.args.get("matchId")
-    try:
-        match_id = int(match_id_raw) if match_id_raw is not None else None
-    except ValueError:
-        match_id = None
-    if match_id is None:
+    fixture_id_raw = request.args.get("matchId")
+    if fixture_id_raw is None:
         return {"error": "matchId query param required"}, 400
 
-    fcm_token = _device_fcm_token(device_id)
+    fixture_id = int(fixture_id_raw)
+
+    fcm_token = device_fcm_token(device_id)
     if fcm_token is None:
         return {"error": "device not registered"}, 404
 
     try:
-        unsubscribe_token(fcm_token, match_id)
-    except RuntimeError as e:
-        return {"error": str(e)}, 503
+        unsubscribe_token(fcm_token, fixture_id)
     except Exception as e:
         app.logger.exception("FCM unsubscribe failed")
         return {"error": str(e)}, 502
 
     with session_scope() as s:
-        existing = s.get(Subscription, (device_id, match_id))
+        existing = s.get(Subscription, (device_id, fixture_id))
         if existing is not None:
             s.delete(existing)
 
-    return {"deviceId": device_id, "matchId": match_id}
+    return {"deviceId": device_id, "matchId": fixture_id}
 
-
-def _resolve_country(raw: str) -> tuple[str, str]:
-    if raw == "World":
-        return "World", "World"
-    if len(raw) == 2 and raw.isalpha():
-        code = raw.upper()
-    else:
-        code = _lookup_code_by_name(raw)
-    return code, COUNTRY_CONTINENT.get(code, "")
-
-
-def _lookup_code_by_name(name: str) -> str:
-    if not name:
-        return ""
-    cached = cache.get("countries", COUNTRIES_TTL)
-    if cached is None:
-        try:
-            data = api_football_get("/countries")
-        except Exception:
-            return ""
-        cached = [country_from_football(c) for c in data.get("response", [])]
-        cached.append({"id": "World", "name": "World", "code": "World", "flag": "", "continent": "World"})
-        cache.put("countries", cached)
-    for c in cached:
-        if c.get("name") == name:
-            return c.get("code") or ""
-    return ""
 
 if __name__ == "__main__":
     from waitress import serve

@@ -21,6 +21,8 @@ LEAGUES_TTL = 60 * 60 * 24 * 7
 FIXTURES_TTL = 60 * 10                  
 DETAILS_LIVE_TTL = 30                  
 DETAILS_FINISHED_TTL = 60 * 60 * 24 * 30
+FIXTURES_PAGE_SIZE = 20
+
 
 STATUS_UPCOMING = "upcoming"
 STATUS_LIVE = "live"
@@ -44,6 +46,7 @@ SPORTS = [
     {"id": "american_football", "name": "American Football", "icon_key": "american_football"},
     {"id": "basketball", "name": "Basketball", "icon_key": "basketball"},
     {"id": "hockey", "name": "Hockey", "icon_key": "hockey"},
+    {"id": "baseball", "name": "Baseball", "icon_key": "baseball"},
 ]
 
 CONTINENTS = [
@@ -70,12 +73,25 @@ ESPN_LEAGUES = [
     {"id": "nhl", "name": "NHL", "sport_id": "hockey", "logo": f"{ESPN_LOGO_BASE}/nhl.png"},
     {"id": "mens-college-hockey", "name": "NCAA Men's Hockey", "sport_id": "hockey", "logo": ""},
     {"id": "womens-college-hockey", "name": "NCAA Women's Hockey", "sport_id": "hockey", "logo": ""},
+    {"id": "mlb", "name": "MLB", "sport_id": "baseball", "logo": f"{ESPN_LOGO_BASE}/mlb.png"},
+    {"id": "college-baseball", "name": "NCAA Baseball", "sport_id": "baseball", "logo": ""},
+    {"id": "college-softball", "name": "NCAA Softball", "sport_id": "baseball", "logo": ""},
+    {"id": "world-baseball-classic", "name": "World Baseball Classic", "sport_id": "baseball", "logo": ""},
+    {"id": "llb", "name": "Little League Baseball", "sport_id": "baseball", "logo": ""},
+    {"id": "lls", "name": "Little League Softball", "sport_id": "baseball", "logo": ""},
+    {"id": "olympics-baseball", "name": "Olympic Baseball", "sport_id": "baseball", "logo": ""},
+    {"id": "dominican-winter-league", "name": "Dominican Winter League", "sport_id": "baseball", "logo": ""},
+    {"id": "mexican-winter-league", "name": "Mexican Winter League", "sport_id": "baseball", "logo": ""},
+    {"id": "puerto-rican-winter-league", "name": "Puerto Rican Winter League", "sport_id": "baseball", "logo": ""},
+    {"id": "venezuelan-winter-league", "name": "Venezuelan Winter League", "sport_id": "baseball", "logo": ""},
+    {"id": "caribbean-series", "name": "Caribbean Series", "sport_id": "baseball", "logo": ""},
 ]
 
 SPORT_TO_ESPN_SLUG = {
     "basketball": "basketball",
     "american_football": "football",
     "hockey": "hockey",
+    "baseball": "baseball",
 }
 
 COUNTRY_CONTINENT = {

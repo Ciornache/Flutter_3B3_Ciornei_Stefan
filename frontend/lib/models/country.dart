@@ -32,13 +32,21 @@ class CountryAdapter extends TypeAdapter<Country> {
   final int typeId = 0;
 
   @override
-  Country read(BinaryReader r) => Country(
-        id: r.readString(),
-        name: r.readString(),
-        code: r.readString(),
-        flag: r.readString(),
-        continent: r.readString(),
-      );
+  Country read(BinaryReader r)
+  {
+    final id = r.readString();
+    final name = r.readString();
+    final code = r.readString();
+    final flag = r.readString();
+    final continent = r.readString();
+    return Country(
+      id: id,
+      name: name,
+      code: code,
+      flag: flag,
+      continent: continent,
+    );
+  }
 
   @override
   void write(BinaryWriter w, Country obj) {

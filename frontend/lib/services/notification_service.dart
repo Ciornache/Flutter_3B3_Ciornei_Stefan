@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -35,24 +34,23 @@ class NotificationService {
       },
     );
 
-    if (Platform.isAndroid) {
-      const channel = AndroidNotificationChannel(
-        _kChannelId,
-        _kChannelName,
-        description: _kChannelDesc,
-        importance: Importance.high,
-      );
-      final android = _plugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
-      await android?.createNotificationChannel(channel);
-      final granted = await android?.requestNotificationsPermission();
-      // ignore: avoid_print
-      print('[NotificationService] android notif permission: $granted');
-    }
+   
+    const channel = AndroidNotificationChannel(
+      _kChannelId,
+      _kChannelName,
+      description: _kChannelDesc,
+      importance: Importance.high,
+    );
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    await android?.createNotificationChannel(channel);
+    final granted = await android?.requestNotificationsPermission();
+
+    print('[NotificationService] android notif permission: $granted');
+    
 
     FirebaseMessaging.onMessage.listen((msg) {
-      // ignore: avoid_print
       print('[NotificationService] onMessage fired: data=${msg.data}');
       showLocal(msg);
     });
@@ -61,7 +59,7 @@ class NotificationService {
     });
 
     final token = await FirebaseMessaging.instance.getToken();
-    // ignore: avoid_print
+
     print('[NotificationService] FCM token: $token');
   }
 
@@ -76,7 +74,6 @@ class NotificationService {
     final data = msg.data;
     final title = data['title']?.toString();
     final body = data['body']?.toString();
-    // ignore: avoid_print
     print('[NotificationService] showLocal title=$title body=$body data=$data');
     if (title == null || body == null) return;
 
@@ -103,10 +100,8 @@ class NotificationService {
         ),
         payload: payload,
       );
-      // ignore: avoid_print
       print('[NotificationService] _plugin.show OK id=${msg.hashCode}');
     } catch (e, st) {
-      // ignore: avoid_print
       print('[NotificationService] _plugin.show FAILED: $e\n$st');
     }
   }
@@ -129,9 +124,10 @@ class NotificationService {
     if (matchId.isEmpty || sport.isEmpty || date.isEmpty) return;
 
     try {
-      final json = await BackendService.getJson(
+      final json = await BackendService.get(
         '/fixtures/$sport/$matchId',
         query: {'date': date},
+        errorMessage: 'Failed to load fixture',
       );
       final fixture = Fixture.fromJson(json as Map<String, dynamic>);
       final nav = navigatorKey.currentState;
@@ -140,7 +136,6 @@ class NotificationService {
         builder: (_) => MatchDetailScreen(fixture: fixture),
       ));
     } catch (e) {
-      // ignore: avoid_print
       print('[NotificationService] navigate failed: $e');
     }
   }

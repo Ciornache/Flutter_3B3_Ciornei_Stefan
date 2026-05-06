@@ -48,12 +48,12 @@ class Worker(ABC):
             time.sleep(max(1.0, self.poll_seconds - elapsed))
 
     def _get_or_create_state(
-        self, session: Session, match_id: int, provider: str
+        self, session: Session, fixture_id: int, provider: str
     ) -> tuple[LiveFixtureState, bool]:
-        row = session.get(LiveFixtureState, (match_id, provider))
+        row = session.get(LiveFixtureState, (fixture_id, provider))
         if row is None:
             row = LiveFixtureState(
-                match_id=match_id,
+                fixture_id=fixture_id,
                 provider=provider,
                 event_count=0,
                 last_polled_at=_utcnow(),
@@ -71,28 +71,28 @@ class Worker(ABC):
                 LiveFixtureState.closed_at.is_(None),
             )
             for row in s.scalars(stmt).all():
-                if row.match_id not in live_ids:
+                if row.fixture_id not in live_ids:
                     row.closed_at = _utcnow()
-                    ended.append(row.match_id)
+                    ended.append(row.fixture_id)
         return ended
 
     def _send_lifecycle(
-        self, match_id: int, title: str,
+        self, fixture_id: int, title: str,
         home: str, away: str, sport: str, fixture_date: str,
     ) -> None:
         if not sport or not fixture_date:
             return
         body = " vs ".join(p for p in (home, away) if p) or "Match"
         try:
-            notify_match(match_id, title, body, sport=sport, fixture_date=fixture_date)
+            notify_match(fixture_id, title, body, sport=sport, fixture_date=fixture_date)
         except RuntimeError as e:
             self.log.warning("fcm not configured, skipping lifecycle: %s", e)
         except Exception:
-            self.log.exception("fcm lifecycle send failed for match %s", match_id)
+            self.log.exception("fcm lifecycle send failed for fixture %s", fixture_id)
 
     def _send_and_record(
         self,
-        match_id: int,
+        fixture_id: int,
         provider: str,
         event_key: str,
         title: str,
@@ -103,17 +103,17 @@ class Worker(ABC):
         fcm_message_id: str | None = None
         try:
             fcm_message_id = notify_match(
-                match_id, title, body, sport=sport, fixture_date=fixture_date
+                fixture_id, title, body, sport=sport, fixture_date=fixture_date
             )
         except RuntimeError as e:
             self.log.warning("fcm not configured, skipping send: %s", e)
         except Exception:
-            self.log.exception("fcm send failed for match %s", match_id)
+            self.log.exception("fcm send failed for fixture %s", fixture_id)
 
         with session_scope() as s:
             s.add(
                 Notification(
-                    match_id=match_id,
+                    fixture_id=fixture_id,
                     provider=provider,
                     event_key=event_key,
                     title=title,

@@ -18,7 +18,7 @@ class Subscription(Base):
     device_id: Mapped[str] = mapped_column(
         ForeignKey("devices.device_id", ondelete="CASCADE"), primary_key=True
     )
-    match_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    fixture_id: Mapped[int] = mapped_column("match_id", Integer, primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     device: Mapped[Device] = relationship(back_populates="subscriptions")

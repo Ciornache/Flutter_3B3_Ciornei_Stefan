@@ -6,48 +6,14 @@ import '../models/sport.dart';
 import '../models/continent.dart';
 import '../models/league.dart';
 import '../models/fixture.dart';
+import '../models/fixture_response.dart';
 import '../services/backend_service.dart';
 import '../services/device_service.dart';
 import '../services/notification_service.dart';
 import '../widgets/fixture_card.dart';
+import '../widgets/pagination_bar.dart';
+import '../utils/setup.dart';
 import 'match_detail_screen.dart';
-
-class _Envelope {
-  final int total;
-  final int totalPages;
-  final int page;
-  final List<Fixture> previous;
-  final List<Fixture> current;
-  final List<Fixture> next;
-
-  _Envelope({
-    required this.total,
-    required this.totalPages,
-    required this.page,
-    required this.previous,
-    required this.current,
-    required this.next,
-  });
-
-  factory _Envelope.fromJson(Map<String, dynamic> j) {
-    List<Fixture> parseList(dynamic v) {
-      if (v is! List) return const [];
-      return v
-          .cast<Map<String, dynamic>>()
-          .map(Fixture.fromJson)
-          .toList();
-    }
-
-    return _Envelope(
-      total: j['total'] as int,
-      totalPages: j['totalPages'] as int,
-      page: j['page'] as int,
-      previous: parseList(j['previous']),
-      current: parseList(j['current']),
-      next: parseList(j['next']),
-    );
-  }
-}
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
@@ -70,7 +36,7 @@ class _MyHomePageState extends State<MyHomePage>
   int _level = 0;
   bool _favouritesOn = false;
   final List<int> _pages = [0, 0, 0];
-  final List<_Envelope?> _envelopes = [null, null, null];
+  final List<FixtureResponse?> _responses = [null, null, null];
   final List<bool> _loading = [false, false, false];
 
   @override
@@ -80,12 +46,12 @@ class _MyHomePageState extends State<MyHomePage>
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) return;
       setState(() {});
-      if (_envelopes[_tabController.index] == null) {
-        _fetchEnvelope(_tabController.index);
+      if (_responses[_tabController.index] == null) {
+        _fetchResponse(_tabController.index);
       }
     });
     _loadDrawerElements();
-    _fetchEnvelope(_tabController.index);
+    _fetchResponse(_tabController.index);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NotificationService.handleInitialMessage();
     });
@@ -101,10 +67,12 @@ class _MyHomePageState extends State<MyHomePage>
   String? get _activeContinent => _filters['continent'];
   String? get _activeCountry => _filters['country'];
   String? get _activeLeague => _filters['league'];
+  int get _maxLevel => 1 + drillPathOf(_selectedSport).length - 1;
+
 
   DrillLevel? _drillLevelAt(int level) {
     if (level == 0) return null;
-    final path = _selectedSport?.drillPath ?? const [];
+    final path = drillPathOf(_selectedSport);
     final idx = level - 1;
     if (idx < 0 || idx >= path.length) return null;
     return path[idx];
@@ -114,8 +82,6 @@ class _MyHomePageState extends State<MyHomePage>
     if (level == 0) return 'sport';
     return _drillLevelAt(level)?.name ?? '';
   }
-
-  int get _maxLevel => 1 + (_selectedSport?.drillPath.length ?? 0) - 1;
 
   Future<List<dynamic>> _openBoxValues(int level) async {
     if (level == 0) {
@@ -171,7 +137,7 @@ class _MyHomePageState extends State<MyHomePage>
   String _isoDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  Future<void> _fetchEnvelope(int tabIndex, {int? page}) async {
+  Future<void> _fetchResponse(int tabIndex, {int? page}) async {
     final p = page ?? _pages[tabIndex];
     setState(() => _loading[tabIndex] = true);
 
@@ -192,17 +158,21 @@ class _MyHomePageState extends State<MyHomePage>
     }
 
     try {
-      final data = await BackendService.getJson('/fixtures', query: query);
-      final env = _Envelope.fromJson(data as Map<String, dynamic>);
+      final data = await BackendService.get(
+        '/fixtures',
+        query: query,
+        errorMessage: 'Failed to load fixtures',
+      );
+      final resp = FixtureResponse.fromJson(data as Map<String, dynamic>);
       if (!mounted) return;
       setState(() {
-        _envelopes[tabIndex] = env;
-        _pages[tabIndex] = env.page;
+        _responses[tabIndex] = resp;
+        _pages[tabIndex] = resp.page;
         _loading[tabIndex] = false;
       });
     } catch (e, st) {
       // ignore: avoid_print
-      print('[home_page] _fetchEnvelope($tabIndex) failed: $e\n$st');
+      print('[home_page] _fetchResponse($tabIndex) failed: $e\n$st');
       if (!mounted) return;
       setState(() => _loading[tabIndex] = false);
     }
@@ -210,10 +180,10 @@ class _MyHomePageState extends State<MyHomePage>
 
   void _resetAllAndFetch() {
     for (var i = 0; i < 3; i++) {
-      _envelopes[i] = null;
+      _responses[i] = null;
       _pages[i] = 0;
     }
-    _fetchEnvelope(_tabController.index);
+    _fetchResponse(_tabController.index);
   }
 
   String _filterValueOf(dynamic element) {
@@ -236,14 +206,11 @@ class _MyHomePageState extends State<MyHomePage>
     if (element is Continent && element.name == 'World') {
       _filters['country'] = 'World';
       _skippedCountry = true;
-      final path = _selectedSport?.drillPath ?? const [];
-      final leagueIdx = path.indexOf(DrillLevel.league);
-      if (leagueIdx >= 0) {
-        _level = 1 + leagueIdx;
-        _loadDrawerElements();
-        _resetAllAndFetch();
-        return;
-      }
+      final path = drillPathOf(_selectedSport);
+      _level = 1 + path.indexOf(DrillLevel.league);
+      _loadDrawerElements();
+      _resetAllAndFetch();
+      return;
     }
 
     if (_level < _maxLevel) {
@@ -255,9 +222,14 @@ class _MyHomePageState extends State<MyHomePage>
     _resetAllAndFetch();
   }
 
+  void _goToPage(int tabIndex, int newPage) {
+    setState(() => _pages[tabIndex] = newPage);
+    _fetchResponse(tabIndex, page: newPage);
+  }
+
   void _deactivateLeague() {
     _filters.remove('league');
-    _resetAllAndFetch();
+    _fetchResponse(_tabController.index);
   }
 
   void _goBack() {
@@ -266,7 +238,7 @@ class _MyHomePageState extends State<MyHomePage>
       _filters.remove('country');
       _filters.remove('continent');
       _skippedCountry = false;
-      final path = _selectedSport?.drillPath ?? const [];
+      final path = drillPathOf(_selectedSport);
       final continentIdx = path.indexOf(DrillLevel.continent);
       _level = continentIdx >= 0 ? 1 + continentIdx : 1;
       _loadDrawerElements();
@@ -283,7 +255,7 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   Widget buildImage(dynamic element) {
-    if (element is Sport) return element.icon;
+    if (element is Sport) return iconFor(element);
     if (element is Continent) return Text(element.emoji);
     if (element is Country) {
       return CountryFlag.fromCountryCode(
@@ -314,25 +286,15 @@ class _MyHomePageState extends State<MyHomePage>
     return const Icon(Icons.error);
   }
 
-  List<Fixture> _displayFixtures(int tab) {
-    final env = _envelopes[tab];
-    if (env == null) return const [];
-    final p = _pages[tab];
-    if (p == env.page) return env.current;
-    if (p == env.page + 1) return env.next;
-    if (p == env.page - 1) return env.previous;
-    return const [];
-  }
-
   Widget _buildFixtureList(int tabIndex) {
-    final env = _envelopes[tabIndex];
+    final resp = _responses[tabIndex];
     final loading = _loading[tabIndex];
-    final fixtures = _displayFixtures(tabIndex);
+    final fixtures = resp?.fixtures ?? const <Fixture>[];
 
-    if (env == null && loading) {
+    if (resp == null && loading) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (env == null) {
+    if (resp == null) {
       return const Center(child: Text('No matches'));
     }
 
@@ -354,51 +316,15 @@ class _MyHomePageState extends State<MyHomePage>
     return Column(
       children: [
         Expanded(child: body),
-        _paginationBar(tabIndex, env, loading),
+        PaginationBar(
+          page: _pages[tabIndex],
+          totalPages: resp.totalPages,
+          totalFixtures: resp.total,
+          loading: loading,
+          onPageChange: (newPage) => _goToPage(tabIndex, newPage),
+        ),
       ],
     );
-  }
-
-  Widget _paginationBar(int tabIndex, _Envelope env, bool loading) {
-    final page = _pages[tabIndex];
-    final total = env.total;
-    final totalPages = env.totalPages;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.chevron_left),
-            onPressed: page > 0 ? () => _goToPage(tabIndex, page - 1) : null,
-          ),
-          Row(
-            children: [
-              Text('Page ${page + 1} of $totalPages  ($total)'),
-              if (loading) ...[
-                const SizedBox(width: 8),
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ],
-            ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            onPressed: page < totalPages - 1
-                ? () => _goToPage(tabIndex, page + 1)
-                : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _goToPage(int tabIndex, int newPage) {
-    setState(() => _pages[tabIndex] = newPage);
-    _fetchEnvelope(tabIndex, page: newPage);
   }
 
   @override
@@ -456,18 +382,32 @@ class _MyHomePageState extends State<MyHomePage>
               ..._drawerElements.map((element) {
                 final isActiveLeague =
                     element is League && _activeLeague == element.id;
-                return ListTile(
-                  selected: isActiveLeague,
-                  selectedTileColor: Colors.blue.shade100,
-                  title: Text(element?.name ?? element.toString()),
-                  trailing: buildImage(element),
-                  onTap: () {
-                    if (isActiveLeague) {
-                      _deactivateLeague();
-                    } else {
-                      _onElementTap(element);
-                    }
-                  },
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  child: ListTile(
+                    selected: isActiveLeague,
+                    selectedTileColor: Colors.blue.shade50,
+                    selectedColor: Colors.blue.shade800,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      side: isActiveLeague
+                          ? BorderSide(color: Colors.blue.shade300, width: 1)
+                          : BorderSide.none,
+                    ),
+                    title: Text(
+                      element?.name,
+                      style: TextStyle(
+                        fontWeight: isActiveLeague
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    trailing: buildImage(element),
+                    onTap: () { isActiveLeague ? _deactivateLeague() : _onElementTap(element);},
+                  ),
                 );
               }),
           ],

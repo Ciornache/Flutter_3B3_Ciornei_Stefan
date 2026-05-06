@@ -9,16 +9,16 @@ def init_firebase() -> None:
     firebase_admin.initialize_app(cred)
 
 
-def topic_for_match(match_id: int) -> str:
-    return f"match_{match_id}"
+def topic_for_match(fixture_id: int) -> str:
+    return f"match_{fixture_id}"
 
 
-def subscribe_token(token: str, match_id: int) -> messaging.TopicManagementResponse:
-    return messaging.subscribe_to_topic([token], topic_for_match(match_id))
+def subscribe_token(token: str, fixture_id: int) -> messaging.TopicManagementResponse:
+    return messaging.subscribe_to_topic([token], topic_for_match(fixture_id))
 
 
-def unsubscribe_token(token: str, match_id: int) -> messaging.TopicManagementResponse:
-    return messaging.unsubscribe_from_topic([token], topic_for_match(match_id))
+def unsubscribe_token(token: str, fixture_id: int) -> messaging.TopicManagementResponse:
+    return messaging.unsubscribe_from_topic([token], topic_for_match(fixture_id))
 
 
 def notify_token(
@@ -27,12 +27,12 @@ def notify_token(
     body: str,
     sport: str = "football",
     fixture_date: str = "",
-    match_id: int = 0,
+    fixture_id: int = 0,
 ) -> str:
     msg = messaging.Message(
         token=token,
         data={
-            "matchId": str(match_id),
+            "matchId": str(fixture_id),
             "sport": sport,
             "date": fixture_date,
             "title": title,
@@ -44,7 +44,7 @@ def notify_token(
 
 
 def notify_match(
-    match_id: int,
+    fixture_id: int,
     title: str,
     body: str,
     sport: str,
@@ -52,9 +52,9 @@ def notify_match(
     extra: dict[str, str] | None = None,
 ) -> str:
     msg = messaging.Message(
-        topic=topic_for_match(match_id),
+        topic=topic_for_match(fixture_id),
         data={
-            "matchId": str(match_id),
+            "matchId": str(fixture_id),
             "sport": sport,
             "date": fixture_date,
             "title": title,

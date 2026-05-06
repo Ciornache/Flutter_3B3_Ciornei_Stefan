@@ -15,7 +15,7 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    match_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    fixture_id: Mapped[int] = mapped_column("match_id", Integer, nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String, nullable=False)
     event_key: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
