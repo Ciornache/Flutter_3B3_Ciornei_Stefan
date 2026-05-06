@@ -28,6 +28,7 @@ class MyApp extends StatelessWidget {
       navigatorKey: NotificationService.navigatorKey,
       title: 'Sport Scores',
       theme: ThemeData(
+        useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
       home: const MyHomePage(title: 'Sport Scores'),

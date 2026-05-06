@@ -11,9 +11,12 @@ class BackendService {
     );
   }
 
-  static dynamic _decode(String body) {
-    if (body.isEmpty) return null;
-    return jsonDecode(body);
+  static dynamic _decode(http.Response resp, String errorMessage) {
+    if (resp.statusCode != 200) {
+      throw Exception('$errorMessage (${resp.statusCode}): ${resp.body}');
+    }
+    if (resp.body.isEmpty) return null;
+    return jsonDecode(resp.body);
   }
 
   static Map<String, String>? _jsonHeaders(Object? body) =>
@@ -28,10 +31,7 @@ class BackendService {
     required String errorMessage,
   }) async {
     final resp = await http.get(_uri(path, query));
-    if (resp.statusCode != 200) {
-      throw Exception('$errorMessage (${resp.statusCode}): ${resp.body}');
-    }
-    return _decode(resp.body);
+    return _decode(resp, errorMessage);
   }
 
   static Future<dynamic> post(
@@ -45,10 +45,7 @@ class BackendService {
       headers: _jsonHeaders(body),
       body: _encodeBody(body),
     );
-    if (resp.statusCode != 200) {
-      throw Exception('$errorMessage (${resp.statusCode}): ${resp.body}');
-    }
-    return _decode(resp.body);
+    return _decode(resp, errorMessage);
   }
 
   static Future<dynamic> put(
@@ -62,10 +59,7 @@ class BackendService {
       headers: _jsonHeaders(body),
       body: _encodeBody(body),
     );
-    if (resp.statusCode != 200) {
-      throw Exception('$errorMessage (${resp.statusCode}): ${resp.body}');
-    }
-    return _decode(resp.body);
+    return _decode(resp, errorMessage);
   }
 
   static Future<dynamic> delete(
@@ -79,9 +73,6 @@ class BackendService {
       headers: _jsonHeaders(body),
       body: _encodeBody(body),
     );
-    if (resp.statusCode != 200) {
-      throw Exception('$errorMessage (${resp.statusCode}): ${resp.body}');
-    }
-    return _decode(resp.body);
+    return _decode(resp, errorMessage);
   }
 }

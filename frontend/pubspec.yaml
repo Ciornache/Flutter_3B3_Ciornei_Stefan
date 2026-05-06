@@ -41,7 +41,7 @@ dependencies:
   country_flags: ^4.1.2
   firebase_messaging: ^16.2.0
   firebase_core: ^4.7.0
-  device_info_plus: ^11.2.0
+  uuid: ^4.5.1
   flutter_local_notifications: ^18.0.1
 
 dev_dependencies:

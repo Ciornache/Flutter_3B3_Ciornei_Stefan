@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/fixture.dart';
 import '../models/status.dart';
+import 'team_logo.dart';
 
 class MatchOverview extends StatelessWidget {
   final Fixture fixture;
@@ -65,16 +66,7 @@ class _TeamBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (logo.isEmpty)
-          const Icon(Icons.shield, size: 56, color: Colors.grey)
-        else
-          Image.network(
-            logo,
-            width: 56,
-            height: 56,
-            errorBuilder: (_, __, ___) =>
-                const Icon(Icons.shield, size: 56, color: Colors.grey),
-          ),
+        TeamLogo(url: logo, size: 56),
         const SizedBox(height: 8),
         Text(
           name,

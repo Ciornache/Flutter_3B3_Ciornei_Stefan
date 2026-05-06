@@ -9,7 +9,6 @@ class Fixture {
   final String leagueLogo;
   final String countryCode;
   final String continent;
-  final String statusText;
   final MatchStatus status;
   final String venue;
   final int homeTeamId;
@@ -30,7 +29,6 @@ class Fixture {
     required this.leagueLogo,
     required this.countryCode,
     required this.continent,
-    required this.statusText,
     required this.status,
     this.venue = '',
     required this.homeTeamId,
@@ -53,7 +51,6 @@ class Fixture {
       leagueLogo: j['leagueLogo'] as String,
       countryCode: j['countryCode'] as String,
       continent: j['continent'] as String,
-      statusText: j['statusText'] as String,
       status: MatchStatusMapper.fromBackend(j['status'] as String),
       venue: j['venue'] as String,
       homeTeamId: _asInt(j['homeTeamId']),

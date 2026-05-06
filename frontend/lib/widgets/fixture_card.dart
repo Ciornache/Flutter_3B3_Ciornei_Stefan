@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/fixture.dart';
+import 'team_logo.dart';
 
 class FixtureCard extends StatelessWidget {
   final Fixture fixture;
@@ -75,7 +76,7 @@ class _TeamSide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final logo = _TeamLogo(url: logoUrl);
+    final logo = TeamLogo(url: logoUrl);
     final name = Expanded(
       child: Text(
         teamName,
@@ -98,32 +99,6 @@ class _TeamSide extends StatelessWidget {
   }
 }
 
-class _TeamLogo extends StatelessWidget {
-  final String url;
-  const _TeamLogo({required this.url});
-
-  @override
-  Widget build(BuildContext context) {
-    const size = 36.0;
-    if (url.isEmpty) {
-      return const SizedBox(
-        width: size,
-        height: size,
-        child: Icon(Icons.shield, size: 28, color: Colors.grey),
-      );
-    }
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Image.network(
-        url,
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: Colors.grey),
-      ),
-    );
-  }
-}
-
 class _MiddleInfo extends StatelessWidget {
   final Fixture fixture;
   final bool sportFilterActive;
@@ -140,6 +115,8 @@ class _MiddleInfo extends StatelessWidget {
 
     final topText = sportFilterActive ? fixture.leagueName : sportLabel;
     final midText = sportFilterActive ? fixture.venue : fixture.leagueName;
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -149,10 +126,9 @@ class _MiddleInfo extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 11,
+          style: textTheme.labelSmall?.copyWith(
             fontWeight: FontWeight.bold,
-            color: Colors.blueGrey,
+            color: scheme.primary,
             letterSpacing: 1.2,
           ),
         ),
@@ -162,12 +138,14 @@ class _MiddleInfo extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 12, color: Colors.black87),
+          style: textTheme.bodySmall?.copyWith(color: scheme.onSurface),
         ),
         const SizedBox(height: 2),
         Text(
           time,
-          style: const TextStyle(fontSize: 11, color: Colors.grey),
+          style: textTheme.labelSmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
         ),
       ],
     );

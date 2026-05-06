@@ -77,28 +77,6 @@ Future<void> initializeDatabase() async {
 
   final metaBox = await Hive.openBox('meta');
 
-  const schemaVersion = 15;
-  if (metaBox.get('schema_version') != schemaVersion) {
-    await Hive.deleteBoxFromDisk('countries');
-    await Hive.deleteBoxFromDisk('leagues');
-    await Hive.deleteBoxFromDisk('sports');
-    await Hive.deleteBoxFromDisk('continents');
-    await Hive.deleteBoxFromDisk('match_details');
-    await metaBox.delete('countries_synced_at');
-    await metaBox.delete('leagues_synced_at');
-    for (final name in const [
-      'fixtures_football',
-      'fixtures_american_football',
-      'fixtures_basketball',
-      'fixtures_hockey',
-      'fixtures_baseball',
-    ]) {
-      await Hive.deleteBoxFromDisk(name);
-      await metaBox.delete('${name}_synced_at');
-    }
-    await metaBox.put('schema_version', schemaVersion);
-  }
-
   final continentsBox = await Hive.openBox<Continent>('continents');
   for (final c in continents) {
     await continentsBox.put(c.name, c);

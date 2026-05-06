@@ -69,6 +69,15 @@ class _MyHomePageState extends State<MyHomePage>
   String? get _activeLeague => _filters['league'];
   int get _maxLevel => 1 + drillPathOf(_selectedSport).length - 1;
 
+  DateTime _tabDate(int tabIndex) {
+    final now = DateTime.now();
+    if (tabIndex == 0) return now.subtract(const Duration(days: 1));
+    if (tabIndex == 2) return now.add(const Duration(days: 1));
+    return now;
+  }
+
+  String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   DrillLevel? _drillLevelAt(int level) {
     if (level == 0) return null;
@@ -107,35 +116,21 @@ class _MyHomePageState extends State<MyHomePage>
     if (drill == DrillLevel.country) {
       final continent = _activeContinent;
       if (continent != null) {
-        items = items
-            .where((c) => c is Country && c.continent == continent)
-            .toList();
+        items = items.where((c) => c.continent == continent).toList();
       }
     } else if (drill == DrillLevel.league) {
       final sportId = _activeSport;
       final countryCode = _activeCountry;
       items = items.where((l) {
-        if (l is! League) return false;
         if (sportId != null && l.sportId != sportId) return false;
         if (countryCode != null && l.countryId != countryCode) return false;
         return true;
       }).toList();
     }
-
     setState(() {
       _drawerElements = items;
     });
   }
-
-  DateTime _tabDate(int tabIndex) {
-    final now = DateTime.now();
-    if (tabIndex == 0) return now.subtract(const Duration(days: 1));
-    if (tabIndex == 2) return now.add(const Duration(days: 1));
-    return now;
-  }
-
-  String _isoDate(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Future<void> _fetchResponse(int tabIndex, {int? page}) async {
     final p = page ?? _pages[tabIndex];
@@ -286,6 +281,20 @@ class _MyHomePageState extends State<MyHomePage>
     return const Icon(Icons.error);
   }
 
+  Widget _buildEmptyState(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.sports_score, size: 48, color: color),
+          const SizedBox(height: 8),
+          Text('No matches', style: TextStyle(color: color)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFixtureList(int tabIndex) {
     final resp = _responses[tabIndex];
     final loading = _loading[tabIndex];
@@ -295,11 +304,11 @@ class _MyHomePageState extends State<MyHomePage>
       return const Center(child: CircularProgressIndicator());
     }
     if (resp == null) {
-      return const Center(child: Text('No matches'));
+      return _buildEmptyState(context);
     }
 
     final body = fixtures.isEmpty
-        ? const Center(child: Text('No matches'))
+        ? _buildEmptyState(context)
         : ListView.builder(
             itemCount: fixtures.length,
             itemBuilder: (_, i) => FixtureCard(
@@ -332,6 +341,7 @@ class _MyHomePageState extends State<MyHomePage>
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
+        centerTitle: true,
         actions: [
           IconButton(
             icon: Icon(
@@ -363,11 +373,16 @@ class _MyHomePageState extends State<MyHomePage>
         child: ListView(
           padding: EdgeInsets.zero,
           children: <Widget>[
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blue),
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+              ),
               child: Text(
                 'Menu',
-                style: TextStyle(color: Colors.white, fontSize: 24),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  fontSize: 24,
+                ),
               ),
             ),
             if (_level > 0)
@@ -389,12 +404,19 @@ class _MyHomePageState extends State<MyHomePage>
                   ),
                   child: ListTile(
                     selected: isActiveLeague,
-                    selectedTileColor: Colors.blue.shade50,
-                    selectedColor: Colors.blue.shade800,
+                    selectedTileColor: Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer,
+                    selectedColor: Theme.of(
+                      context,
+                    ).colorScheme.onPrimaryContainer,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                       side: isActiveLeague
-                          ? BorderSide(color: Colors.blue.shade300, width: 1)
+                          ? BorderSide(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 1,
+                            )
                           : BorderSide.none,
                     ),
                     title: Text(
@@ -406,7 +428,11 @@ class _MyHomePageState extends State<MyHomePage>
                       ),
                     ),
                     trailing: buildImage(element),
-                    onTap: () { isActiveLeague ? _deactivateLeague() : _onElementTap(element);},
+                    onTap: () {
+                      isActiveLeague
+                          ? _deactivateLeague()
+                          : _onElementTap(element);
+                    },
                   ),
                 );
               }),

@@ -21,28 +21,6 @@ def unsubscribe_token(token: str, fixture_id: int) -> messaging.TopicManagementR
     return messaging.unsubscribe_from_topic([token], topic_for_match(fixture_id))
 
 
-def notify_token(
-    token: str,
-    title: str,
-    body: str,
-    sport: str = "football",
-    fixture_date: str = "",
-    fixture_id: int = 0,
-) -> str:
-    msg = messaging.Message(
-        token=token,
-        data={
-            "matchId": str(fixture_id),
-            "sport": sport,
-            "date": fixture_date,
-            "title": title,
-            "body": body,
-        },
-        android=messaging.AndroidConfig(priority="high"),
-    )
-    return messaging.send(msg)
-
-
 def notify_match(
     fixture_id: int,
     title: str,

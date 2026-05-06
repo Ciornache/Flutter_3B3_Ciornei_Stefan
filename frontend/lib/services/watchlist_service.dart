@@ -10,8 +10,6 @@ class WatchlistService {
 
   static bool isWatching(int matchId) => _box.containsKey(matchId);
 
-  static Iterable<int> all() => _box.keys.cast<int>();
-
   static Future<void> toggle(int matchId) async {
     final deviceId = DeviceService.cachedDeviceId;
     if (deviceId == null) {

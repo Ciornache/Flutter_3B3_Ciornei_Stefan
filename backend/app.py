@@ -30,7 +30,6 @@ from services.api_service import api_football_get, espn_summary
 from services.notifications import (
     init_firebase,
     notify_match,
-    notify_token,
     subscribe_token,
     unsubscribe_token,
 )
