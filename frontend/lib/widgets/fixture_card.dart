@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/fixture.dart';
+import '../models/status.dart';
+import 'status_badge.dart';
 import 'team_logo.dart';
 
 class FixtureCard extends StatelessWidget {
@@ -35,6 +37,7 @@ class FixtureCard extends StatelessWidget {
                 logoUrl: fixture.homeTeamLogo,
                 score: fixture.homeScore,
                 alignEnd: false,
+                heroTag: 'fixture-${fixture.id}-home',
               ),
             ),
             Expanded(
@@ -51,6 +54,7 @@ class FixtureCard extends StatelessWidget {
                 logoUrl: fixture.awayTeamLogo,
                 score: fixture.awayScore,
                 alignEnd: true,
+                heroTag: 'fixture-${fixture.id}-away',
               ),
             ),
           ],
@@ -66,17 +70,19 @@ class _TeamSide extends StatelessWidget {
   final String logoUrl;
   final int? score;
   final bool alignEnd;
+  final String heroTag;
 
   const _TeamSide({
     required this.teamName,
     required this.logoUrl,
     required this.score,
     required this.alignEnd,
+    required this.heroTag,
   });
 
   @override
   Widget build(BuildContext context) {
-    final logo = TeamLogo(url: logoUrl);
+    final logo = Hero(tag: heroTag, child: TeamLogo(url: logoUrl));
     final name = Expanded(
       child: Text(
         teamName,
@@ -88,7 +94,11 @@ class _TeamSide extends StatelessWidget {
     );
     final scoreText = Text(
       score?.toString() ?? '-',
-      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      style: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+        fontFeatures: [FontFeature.tabularFigures()],
+      ),
     );
 
     final children = alignEnd
@@ -141,13 +151,17 @@ class _MiddleInfo extends StatelessWidget {
           style: textTheme.bodySmall?.copyWith(color: scheme.onSurface),
         ),
         const SizedBox(height: 2),
-        Text(
-          time,
-          style: textTheme.labelSmall?.copyWith(
-            color: scheme.onSurfaceVariant,
+        if (fixture.status == MatchStatus.live)
+          const StatusBadge(status: MatchStatus.live)
+        else
+          Text(
+            time,
+            style: textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
-        ),
       ],
     );
   }
 }
+

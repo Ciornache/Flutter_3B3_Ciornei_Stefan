@@ -9,7 +9,6 @@ import '../models/fixture.dart';
 import '../models/fixture_response.dart';
 import '../services/backend_service.dart';
 import '../services/device_service.dart';
-import '../services/notification_service.dart';
 import '../widgets/fixture_card.dart';
 import '../widgets/pagination_bar.dart';
 import '../utils/setup.dart';
@@ -52,9 +51,6 @@ class _MyHomePageState extends State<MyHomePage>
     });
     _loadDrawerElements();
     _fetchResponse(_tabController.index);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      NotificationService.handleInitialMessage();
-    });
   }
 
   @override
@@ -81,7 +77,7 @@ class _MyHomePageState extends State<MyHomePage>
 
   DrillLevel? _drillLevelAt(int level) {
     if (level == 0) return null;
-    final path = drillPathOf(_selectedSport);
+    final path = drillPathOf(_selectedSport);_
     final idx = level - 1;
     if (idx < 0 || idx >= path.length) return null;
     return path[idx];

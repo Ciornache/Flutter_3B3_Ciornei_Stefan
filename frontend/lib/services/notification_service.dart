@@ -22,6 +22,7 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
+  static String? _pendingLaunchPayload;
 
   static Future<void> init() async {
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -34,39 +35,38 @@ class NotificationService {
       },
     );
 
-   
     const channel = AndroidNotificationChannel(
       _kChannelId,
       _kChannelName,
       description: _kChannelDesc,
       importance: Importance.high,
     );
+
     final android = _plugin
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
     await android?.createNotificationChannel(channel);
-    final granted = await android?.requestNotificationsPermission();
 
-    print('[NotificationService] android notif permission: $granted');
-    
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp ?? false) {
+      _pendingLaunchPayload = launch!.notificationResponse?.payload;
+    }
 
     FirebaseMessaging.onMessage.listen((msg) {
       print('[NotificationService] onMessage fired: data=${msg.data}');
       showLocal(msg);
     });
-    FirebaseMessaging.onMessageOpenedApp.listen((msg) {
-      _navigateFromData(msg.data);
-    });
 
     final token = await FirebaseMessaging.instance.getToken();
 
     print('[NotificationService] FCM token: $token');
-  }
 
-  static Future<void> handleInitialMessage() async {
-    final initial = await FirebaseMessaging.instance.getInitialMessage();
-    if (initial != null) {
-      _navigateFromData(initial.data);
+    if (_pendingLaunchPayload != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final payload = _pendingLaunchPayload;
+        _pendingLaunchPayload = null;
+        _navigateFromPayload(payload);
+      });
     }
   }
 

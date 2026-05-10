@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/fixture.dart';
-import '../models/status.dart';
+import 'status_badge.dart';
 import 'team_logo.dart';
 
 class MatchOverview extends StatelessWidget {
@@ -20,19 +20,25 @@ class MatchOverview extends StatelessWidget {
                 child: _TeamBlock(
                   name: fixture.homeTeamName,
                   logo: fixture.homeTeamLogo,
+                  heroTag: 'fixture-${fixture.id}-home',
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(
                   '${fixture.homeScore ?? '-'}  :  ${fixture.awayScore ?? '-'}',
-                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
               Expanded(
                 child: _TeamBlock(
                   name: fixture.awayTeamName,
                   logo: fixture.awayTeamLogo,
+                  heroTag: 'fixture-${fixture.id}-away',
                 ),
               ),
             ],
@@ -50,7 +56,7 @@ class MatchOverview extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 8),
-          _StatusBadge(status: fixture.status),
+          StatusBadge(status: fixture.status),
         ],
       ),
     );
@@ -60,13 +66,18 @@ class MatchOverview extends StatelessWidget {
 class _TeamBlock extends StatelessWidget {
   final String name;
   final String logo;
-  const _TeamBlock({required this.name, required this.logo});
+  final String heroTag;
+  const _TeamBlock({
+    required this.name,
+    required this.logo,
+    required this.heroTag,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        TeamLogo(url: logo, size: 56),
+        Hero(tag: heroTag, child: TeamLogo(url: logo, size: 56)),
         const SizedBox(height: 8),
         Text(
           name,
@@ -80,33 +91,3 @@ class _TeamBlock extends StatelessWidget {
   }
 }
 
-class _StatusBadge extends StatelessWidget {
-  final MatchStatus status;
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (status) {
-      MatchStatus.upcoming => Colors.blueGrey,
-      MatchStatus.live => Colors.red,
-      MatchStatus.finished => Colors.green,
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color),
-      ),
-      child: Text(
-        status.display.toUpperCase(),
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
-  }
-}

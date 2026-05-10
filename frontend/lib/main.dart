@@ -29,7 +29,9 @@ class MyApp extends StatelessWidget {
       title: 'Sport Scores',
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF1A4789),
+        ),
       ),
       home: const MyHomePage(title: 'Sport Scores'),
     );

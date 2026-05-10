@@ -76,6 +76,27 @@ def _football_clock_key(p: dict) -> int:
     return base * 100 + add
 
 
+def _flatten_espn_stats(raw_stats: list, category: str = "") -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for s in raw_stats:
+        sm = as_map(s)
+        nested = sm.get("stats")
+        if isinstance(nested, list):
+            cat = str(sm.get("displayName") or sm.get("name") or "")
+            parsed.update(_flatten_espn_stats(nested, cat))
+            continue
+        label = str(sm.get("label") or sm.get("displayName") or sm.get("name") or "")
+        if not label:
+            continue
+        if category:
+            label = f"{category} · {label}"
+        value = sm.get("displayValue")
+        if value is None:
+            value = sm.get("value")
+        parsed[label] = "" if value is None else str(value)
+    return parsed
+
+
 def details_from_espn(summary: dict) -> dict:
     boxscore = as_map(summary.get("boxscore"))
     teams = boxscore.get("teams") or []
@@ -84,18 +105,7 @@ def details_from_espn(summary: dict) -> dict:
     for t in teams:
         m = as_map(t)
         side = str(m.get("homeAway") or "")
-        raw_stats = m.get("statistics") or []
-        parsed: dict[str, str] = {}
-        for s in raw_stats:
-            sm = as_map(s)
-            label = str(sm.get("label") or sm.get("name") or "")
-            value = sm.get("displayValue")
-            if value is None:
-                value = sm.get("value")
-            value_str = "" if value is None else str(value)
-            if not label:
-                continue
-            parsed[label] = value_str
+        parsed = _flatten_espn_stats(m.get("statistics") or [])
         if side == "home":
             home_stats = parsed
         elif side == "away":
